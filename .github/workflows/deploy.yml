@@ -38,6 +38,11 @@ jobs:
       - name: 抓取當日上市櫃資料
         run: python3 scripts/fetch_data.py
 
+      # 除權息預告表只涵蓋未來約兩個月，必須每天累積才不會漏掉配股事件
+      - name: 收集除權配股事件
+        run: python3 scripts/fetch_exrights.py
+        continue-on-error: true
+
       - name: 重建歷史評價區間（僅在手動勾選或每月 1 日）
         if: github.event.inputs.rebuild_bands == 'true' || github.run_number == 1
         run: python3 scripts/build_bands.py --years 5

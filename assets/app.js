@@ -8,6 +8,7 @@
   // ── 狀態 ────────────────────────────────────────────────
   let STOCKS = [];        // 全市場個股
   let BANDS = {};         // 代號 -> {pe:[P20,P50,P80], pb:[...], y:[...]}
+  let EXRIGHTS = {};      // 代號 -> [{d:除權日, k:配股率, cash:現金股利}]
   let INDEX = new Map();  // 代號 -> 個股
   let current = null;     // 目前選定的個股
   let sugIdx = -1;        // 建議清單游標
@@ -43,6 +44,64 @@
   };
 
   // ═══════════════════════════════════════════════════════
+  //  除權（無償配股）攤薄修正
+  //
+  //  交易所在除權當天，是拿「已稀釋的股價」除以「還沒按新股本重算的
+  //  每股盈餘／淨值」，所以本站反推出來的 EPS 與每股淨值會是未攤薄的值，
+  //  直接拿去估價會高估，幅度約等於配股率。這裡依配股率把它除回來。
+  //
+  //  判斷準則：除權日晚於目前財報基準季的季末，代表該季財報的每股數字
+  //  還沒反映新股本。上櫃來源沒有財報季欄位，改以近 150 天內除權近似。
+  // ═══════════════════════════════════════════════════════
+  const todayISO = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+
+  /** "115/2" -> "2026-06-30"（民國年 / 季 → 該季季末） */
+  function fiscalEnd(fq) {
+    const m = /^(\d{2,3})\/([1-4])$/.exec((fq || "").trim());
+    if (!m) return null;
+    return (+m[1] + 1911) + "-" + ["03-31", "06-30", "09-30", "12-31"][+m[2] - 1];
+  }
+
+  function dilutionOf(s) {
+    const evs = EXRIGHTS[s.c];
+    if (!evs || !evs.length) return null;
+    const today = todayISO();
+    // 沒有財報季資訊時（上櫃），用 150 天回看當作近似
+    const cut = fiscalEnd(s.fq) ||
+      new Date(Date.now() + 8 * 3600e3 - 150 * 86400e3).toISOString().slice(0, 10);
+
+    // 只算「已經除權、且晚於財報基準日」的事件；未來的除權還沒影響股價
+    const after = evs.filter((e) => e.d > cut && e.d <= today);
+    if (!after.length) return null;
+
+    const known = after.filter((e) => e.k != null && e.k > 0);
+    const unknown = after.filter((e) => e.k == null);
+    const factor = known.reduce((a, e) => a * (1 + e.k), 1);
+    if (factor <= 1 && !unknown.length) return null;
+    return { factor, known, unknown, approx: !fiscalEnd(s.fq) };
+  }
+
+  /** 回傳套用攤薄後的個股副本；ROE 是比值，不受攤薄影響。 */
+  function effective(s) {
+    const adj = dilutionOf(s);
+    if (!adj || adj.factor <= 1) return Object.assign({}, s, { _adj: adj });
+    return Object.assign({}, s, {
+      eps: s.eps ? s.eps / adj.factor : s.eps,
+      bvps: s.bvps ? s.bvps / adj.factor : s.bvps,
+      _adj: adj,
+      _rawEps: s.eps, _rawBvps: s.bvps,
+    });
+  }
+
+  /** 給估價公式用的小註解，說明數字被攤薄過 */
+  function dilutionNote(s) {
+    const a = s._adj;
+    if (!a || a.factor <= 1) return "";
+    const list = a.known.map((e) => `${e.d} 配股 ${fmt(e.k * 100, 1)}%`).join("、");
+    return `<br><span class="formula-adj">↳ 已依 ${list} 攤薄（÷ ${fmt(a.factor, 4)}）</span>`;
+  }
+
+  // ═══════════════════════════════════════════════════════
   //  四種估價法
   //  每個方法回傳 {cheap, fair, rich, basis, formula} 或 {na: "不適用原因"}
   // ═══════════════════════════════════════════════════════
@@ -65,8 +124,10 @@
       cheap: fair * (1 - m), fair, rich: fair * (1 + m),
       basis: `<span class="basis-tag">參數</span>r ${fmt(params.r, 1)}%　g ${fmt(params.g, 1)}%　安全邊際 ${fmt(params.mos, 0)}%`,
       formula:
-        `合理 P/B ＝ (ROE ${fmt(s.roe)}% − g ${fmt(params.g, 1)}%) ÷ (r ${fmt(params.r, 1)}% − g ${fmt(params.g, 1)}%) ＝ ${fmt(pbFair)} 倍<br>` +
-        `合理價 ＝ 每股淨值 ${fmt(s.bvps)} × ${fmt(pbFair)} ＝ ${fmt(fair)} 元<br>` +
+        `合理 P/B ＝ (ROE ${fmt(s.roe)}% − g ${fmt(params.g, 1)}%) ÷ (r ${fmt(params.r, 1)}% − g ${fmt(params.g, 1)}%) ＝ ${fmt(pbFair)} 倍` +
+        (s._adj && s._adj.factor > 1
+          ? `<br>每股淨值 ${fmt(s._rawBvps)} 依配股攤薄 → ${fmt(s.bvps)} 元` : "") +
+        `<br>合理價 ＝ 每股淨值 ${fmt(s.bvps)} × ${fmt(pbFair)} ＝ ${fmt(fair)} 元<br>` +
         `便宜 / 昂貴價 ＝ 合理價 × (1 ∓ ${fmt(params.mos, 0)}%)`,
     };
   }
@@ -80,8 +141,9 @@
       cheap: s.bvps * lo, fair: s.bvps * mid, rich: s.bvps * hi,
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`),
       formula:
-        `每股淨值 ＝ 收盤價 ${fmt(s.p)} ÷ 股價淨值比 ${fmt(s.pb)} ＝ ${fmt(s.bvps)} 元<br>` +
-        `各價位 ＝ ${fmt(s.bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+        `每股淨值 ＝ 收盤價 ${fmt(s.p)} ÷ 股價淨值比 ${fmt(s.pb)} ＝ ${fmt(s._rawBvps || s.bvps)} 元` +
+        dilutionNote(s) +
+        `<br>各價位 ＝ ${fmt(s.bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
     };
   }
 
@@ -113,8 +175,9 @@
       cheap: s.eps * lo, fair: s.eps * mid, rich: s.eps * hi,
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`),
       formula:
-        `近四季 EPS ＝ 收盤價 ${fmt(s.p)} ÷ 本益比 ${fmt(s.pe)} ＝ ${fmt(s.eps)} 元<br>` +
-        `各價位 ＝ ${fmt(s.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+        `近四季 EPS ＝ 收盤價 ${fmt(s.p)} ÷ 本益比 ${fmt(s.pe)} ＝ ${fmt(s._rawEps || s.eps)} 元` +
+        dilutionNote(s) +
+        `<br>各價位 ＝ ${fmt(s.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
     };
   }
 
@@ -141,8 +204,8 @@
   //  渲染
   // ═══════════════════════════════════════════════════════
   function render() {
-    const s = current;
-    if (!s) return;
+    if (!current) return;
+    const s = effective(current);   // 套用除權配股攤薄後的數字
 
     el.sName.textContent = s.n;
     el.sCode.textContent = s.c;
@@ -151,6 +214,7 @@
     el.sPrice.textContent = fmt(s.p);
     el.sEps.textContent = s.eps ? fmt(s.eps) + " 元" : "—";
     el.sBvps.textContent = s.bvps ? fmt(s.bvps) + " 元" : "—";
+    renderDilution(s);
     el.sRoe.textContent = s.roe ? fmt(s.roe) + " %" : "—";
     el.sDps.textContent = s.d ? fmt(s.d) + " 元" : "—";
     el.sPe.textContent = s.pe ? fmt(s.pe) + " 倍" : "—";
@@ -196,6 +260,37 @@
     });
 
     renderSummary(s, results);
+  }
+
+  /** 個股卡上的除權配股提示 */
+  function renderDilution(s) {
+    const box = $("dilutionNote");
+    if (!box) return;
+    const a = s._adj;
+    if (!a) { box.hidden = true; return; }
+
+    const parts = [];
+    if (a.factor > 1) {
+      const list = a.known.map((e) =>
+        `<b>${e.d}</b> 配股 <b>${fmt(e.k * 100, 1)}%</b>`).join("、");
+      parts.push(
+        `本檔於 ${list}。交易所公布的本益比與股價淨值比在除權後，是用已稀釋的股價
+         除以尚未按新股本重算的每股盈餘，因此本站已把 EPS 與每股淨值除以
+         <b>${fmt(a.factor, 4)}</b> 還原成攤薄後的數字
+         （EPS ${fmt(s._rawEps)} → <b>${fmt(s.eps)}</b>，
+         每股淨值 ${fmt(s._rawBvps)} → <b>${fmt(s.bvps)}</b>）。`);
+    }
+    if (a.unknown.length) {
+      parts.push(
+        `另有 ${a.unknown.map((e) => e.d).join("、")} 的<b>權息</b>（同日配股又配息），
+         公開資料無法把配股率與現金股利分離，<b>這部分未修正</b>，
+         實際合理價可能再低一些。`);
+    }
+    if (a.approx) {
+      parts.push(`上櫃來源未提供財報基準季，此處以近 150 天內是否除權作近似判斷。`);
+    }
+    box.innerHTML = `<span class="dn-ico">⚖︎</span><div>${parts.join("<br><br>")}</div>`;
+    box.hidden = false;
   }
 
   function renderSummary(s, results) {
@@ -339,16 +434,19 @@
 
   async function boot() {
     try {
-      const [latest, bands] = await Promise.all([
+      const [latest, bands, exr] = await Promise.all([
         fetch("data/latest.json?t=" + Date.now()).then((r) => {
           if (!r.ok) throw new Error("latest.json " + r.status);
           return r.json();
         }),
         fetch("data/bands.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
                                                 .catch(() => null),
+        fetch("data/exrights.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
+                                                   .catch(() => null),
       ]);
       ingest(latest);
       if (bands && bands.bands) BANDS = bands.bands;
+      if (exr && exr.events) EXRIGHTS = exr.events;
       el.loading.hidden = true;
 
       const hash = decodeURIComponent(location.hash.replace("#", "")).trim();
