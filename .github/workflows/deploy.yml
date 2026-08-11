@@ -1,0 +1,72 @@
+name: 更新股價資料並部署
+
+on:
+  # 台股收盤 13:30、證交所盤後資料約 14:30 之後齊全。
+  # cron 使用 UTC：07:20 UTC = 15:20 台北時間，週一到週五各跑一次。
+  schedule:
+    - cron: "20 7 * * 1-5"
+  # 手動觸發（GitHub 網頁的 Actions 分頁按 Run workflow）
+  workflow_dispatch:
+    inputs:
+      rebuild_bands:
+        description: "同時重建近 5 年評價區間（約需 5 分鐘）"
+        type: boolean
+        default: false
+  # 推送程式碼時也重新部署一次
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # 允許把更新後的 data/*.json 推回 repo
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 抓取當日上市櫃資料
+        run: python3 scripts/fetch_data.py
+
+      - name: 重建歷史評價區間（僅在手動勾選或每月 1 日）
+        if: github.event.inputs.rebuild_bands == 'true' || github.run_number == 1
+        run: python3 scripts/build_bands.py --years 5
+        continue-on-error: true
+
+      - name: 將更新後的資料推回 repo
+        if: github.event_name != 'push'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "資料無變動，略過 commit"
+          else
+            git commit -m "資料更新：$(date -u +'%Y-%m-%d') [skip ci]"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

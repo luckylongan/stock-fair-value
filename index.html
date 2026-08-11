@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>合理股價估算器 ｜ 台股四大估價法</title>
+<meta name="description" content="以 ROE 法、股價淨值比法、股利法、本益比法估算台股合理價，資料取自證交所與櫃買中心當日公開資訊。">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">📈</span>
+      <div>
+        <h1>合理股價估算器</h1>
+        <p class="brand-sub">ROE 法 ｜ 股價淨值比法 ｜ 股利法 ｜ 本益比法</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="datainfo">
+        <span id="dataDate" class="datainfo-date">載入中…</span>
+        <span id="dataCount" class="datainfo-count"></span>
+      </div>
+      <button id="refreshBtn" class="btn btn-ghost" title="直接向證交所 / 櫃買中心抓取最新資料">
+        <span class="btn-ico">⟳</span> 更新資料
+      </button>
+      <button id="themeBtn" class="btn btn-icon" title="切換深淺色">◐</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 搜尋 -->
+  <section class="search-block">
+    <div class="search-box">
+      <span class="search-ico">🔍</span>
+      <input id="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="輸入股票代號或名稱，例如 2330 或 台積電" aria-label="搜尋股票">
+      <button id="clearBtn" class="search-clear" hidden aria-label="清除">✕</button>
+    </div>
+    <ul id="suggest" class="suggest" hidden></ul>
+    <div class="quickpicks">
+      <span class="quickpicks-label">熱門：</span>
+      <button class="chip" data-code="2330">台積電</button>
+      <button class="chip" data-code="2317">鴻海</button>
+      <button class="chip" data-code="2412">中華電</button>
+      <button class="chip" data-code="2882">國泰金</button>
+      <button class="chip" data-code="1216">統一</button>
+      <button class="chip" data-code="2603">長榮</button>
+    </div>
+  </section>
+
+  <div id="loading" class="state-msg">正在載入股價資料…</div>
+  <div id="errorBox" class="state-msg state-error" hidden></div>
+
+  <!-- 結果 -->
+  <section id="result" hidden>
+
+    <!-- 個股概況 -->
+    <div class="card stock-head">
+      <div class="stock-id">
+        <h2><span id="sName">—</span> <span id="sCode" class="code">—</span></h2>
+        <span id="sMarket" class="tag">—</span>
+        <span id="sDate" class="tag tag-quiet">—</span>
+      </div>
+      <div class="stock-price">
+        <span class="label">收盤價</span>
+        <strong id="sPrice">—</strong>
+        <span class="unit">元</span>
+      </div>
+      <dl class="fundamentals">
+        <div><dt>EPS<small>近四季</small></dt><dd id="sEps">—</dd></div>
+        <div><dt>每股淨值<small>最近一季</small></dt><dd id="sBvps">—</dd></div>
+        <div><dt>ROE<small>近四季</small></dt><dd id="sRoe">—</dd></div>
+        <div><dt>現金股利<small>近一年</small></dt><dd id="sDps">—</dd></div>
+        <div><dt>本益比<small>目前</small></dt><dd id="sPe">—</dd></div>
+        <div><dt>股價淨值比<small>目前</small></dt><dd id="sPb">—</dd></div>
+        <div><dt>現金殖利率<small>目前</small></dt><dd id="sY">—</dd></div>
+        <div><dt>財報基準<small>—</small></dt><dd id="sFq">—</dd></div>
+      </dl>
+    </div>
+
+    <!-- 綜合結論 -->
+    <div class="card summary">
+      <div class="summary-head">
+        <h3>綜合評估</h3>
+        <p class="summary-sub">取下方各估價法的<strong>中位數</strong>；勾選卡片可調整納入哪幾種方法。</p>
+      </div>
+      <div class="summary-grid">
+        <div class="sum-cell cheap"><span class="sum-label">便宜價</span><strong id="tCheap">—</strong></div>
+        <div class="sum-cell fair"><span class="sum-label">合理價</span><strong id="tFair">—</strong></div>
+        <div class="sum-cell rich"><span class="sum-label">昂貴價</span><strong id="tRich">—</strong></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-track">
+          <div class="gauge-seg seg-cheap"></div>
+          <div class="gauge-seg seg-fair"></div>
+          <div class="gauge-seg seg-rich"></div>
+          <div id="gaugeMark" class="gauge-mark" style="left:50%">
+            <span class="gauge-bubble">現價 <b id="gaugePrice">—</b></span>
+          </div>
+        </div>
+        <div class="gauge-scale">
+          <span id="gScaleL" style="left:25%">—</span>
+          <span id="gScaleM" style="left:50%">—</span>
+          <span id="gScaleR" style="left:75%">—</span>
+        </div>
+      </div>
+      <p id="verdict" class="verdict">—</p>
+    </div>
+
+    <!-- 四大估價法 -->
+    <div id="methods" class="methods"></div>
+
+    <!-- 參數 -->
+    <details class="card params">
+      <summary><h3>估價參數</h3><span class="params-hint">預設值可依產業特性自行調整</span></summary>
+      <div class="params-body">
+
+        <div class="param-group">
+          <h4>資料基準</h4>
+          <label class="switch-row">
+            <input type="checkbox" id="pUseBands" checked>
+            <span>優先使用「該股自身的歷史評價區間」（近 5 年 P20 / P50 / P80）</span>
+          </label>
+          <p class="param-note">
+            關閉後，本益比法、股價淨值比法、股利法一律改用下方的固定倍數。
+            上櫃股票因來源未提供歷史資料，一律使用固定倍數。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>本益比法（無歷史資料時）</h4>
+          <div class="param-row">
+            <label>便宜 <input type="number" id="pPeLo" value="10" min="1" max="100" step="0.5"> 倍</label>
+            <label>合理 <input type="number" id="pPeMid" value="15" min="1" max="100" step="0.5"> 倍</label>
+            <label>昂貴 <input type="number" id="pPeHi" value="20" min="1" max="100" step="0.5"> 倍</label>
+          </div>
+        </div>
+
+        <div class="param-group">
+          <h4>股價淨值比法（無歷史資料時）</h4>
+          <div class="param-row">
+            <label>便宜 <input type="number" id="pPbLo" value="0.8" min="0.1" max="20" step="0.1"> 倍</label>
+            <label>合理 <input type="number" id="pPbMid" value="1.2" min="0.1" max="20" step="0.1"> 倍</label>
+            <label>昂貴 <input type="number" id="pPbHi" value="1.8" min="0.1" max="20" step="0.1"> 倍</label>
+          </div>
+        </div>
+
+        <div class="param-group">
+          <h4>股利法（無歷史資料時）</h4>
+          <div class="param-row">
+            <label>便宜殖利率 <input type="number" id="pYHi" value="6.25" min="0.1" max="30" step="0.05"> %</label>
+            <label>合理殖利率 <input type="number" id="pYMid" value="5" min="0.1" max="30" step="0.05"> %</label>
+            <label>昂貴殖利率 <input type="number" id="pYLo" value="3.125" min="0.1" max="30" step="0.05"> %</label>
+          </div>
+          <p class="param-note">預設值即經典的「現金股利 × 16 / 20 / 32 倍」。</p>
+        </div>
+
+        <div class="param-group">
+          <h4>ROE 法</h4>
+          <div class="param-row">
+            <label>要求報酬率 r <input type="number" id="pR" value="8" min="1" max="40" step="0.5"> %</label>
+            <label>永續成長率 g <input type="number" id="pG" value="2" min="0" max="15" step="0.5"> %</label>
+            <label>安全邊際 <input type="number" id="pMos" value="25" min="0" max="60" step="5"> %</label>
+          </div>
+          <p class="param-note">g 必須小於 r，否則模型無解。</p>
+        </div>
+
+        <button id="resetParams" class="btn btn-ghost btn-sm">還原預設值</button>
+      </div>
+    </details>
+
+    <!-- 方法說明 -->
+    <details class="card explain">
+      <summary><h3>四種估價法怎麼算？</h3></summary>
+      <div class="explain-body">
+        <h4>1. ROE 法（股東權益報酬率法）</h4>
+        <p>用公司「幫股東賺錢的效率」反推它的淨值該值多少倍。由高登成長模型推導：</p>
+        <pre>合理股價淨值比 = (ROE − g) ÷ (r − g)
+合理價 = 每股淨值 × 合理股價淨值比</pre>
+        <p>r 是你要求的年報酬率，g 是長期成長率。ROE 高於 r 時，公司值得溢價於淨值；
+           低於 r 時則該打折。便宜價與昂貴價再以安全邊際上下調整。
+           <strong>ROE 必須大於 g</strong> 才有意義。</p>
+
+        <h4>2. 股價淨值比法（P/B Ratio）</h4>
+        <pre>合理價 = 每股淨值 × 合理股價淨值比</pre>
+        <p>倍數優先取該股近 5 年的 P20 / P50 / P80。適合資產型、獲利波動大的公司
+           （金融、營建、景氣循環股），因為淨值比盈餘穩定。</p>
+
+        <h4>3. 股利法（現金股利折現）</h4>
+        <pre>合理價 = 每股現金股利 ÷ 目標殖利率</pre>
+        <p>殖利率越高代表股價越便宜，所以「便宜價」用最高的殖利率去除。
+           經典做法是股利的 16 倍（6.25%）、20 倍（5%）、32 倍（3.125%）。
+           適合配息穩定的成熟公司；不配息或配息斷斷續續的股票不適用。</p>
+
+        <h4>4. 本益比法（P/E Ratio）</h4>
+        <pre>合理價 = 近四季 EPS × 合理本益比</pre>
+        <p>最直覺的方法，倍數同樣優先取該股自身近 5 年區間。
+           虧損（EPS 為負或無本益比）時不適用；獲利大起大落的公司也容易失真。</p>
+
+        <h4>數字怎麼來的</h4>
+        <p>證交所與櫃買中心每日公布各股的收盤價、本益比、股價淨值比、現金殖利率，
+           本站由此推算：</p>
+        <pre>EPS  = 收盤價 ÷ 本益比
+每股淨值 = 收盤價 ÷ 股價淨值比
+ROE  = EPS ÷ 每股淨值 = 股價淨值比 ÷ 本益比
+現金股利 = 收盤價 × 現金殖利率</pre>
+      </div>
+    </details>
+
+  </section>
+
+  <section id="empty" class="empty">
+    <p class="empty-ico">📊</p>
+    <p>輸入股票代號或名稱開始估價</p>
+    <p class="empty-sub">收錄上市與上櫃普通股，資料來自臺灣證券交易所與證券櫃檯買賣中心</p>
+  </section>
+
+</main>
+
+<footer class="foot wrap">
+  <p class="disclaimer">
+    <strong>免責聲明：</strong>本站是公開資訊的計算工具，所有數字皆由上述公式機械式算出，
+    不構成任何投資建議或買賣要約。估價模型有其假設與限制，無法反映產業前景、
+    一次性損益、公司治理等因素。投資決策與其結果請自行負責。
+  </p>
+  <p class="foot-src">
+    資料來源：臺灣證券交易所 OpenAPI ／ 證券櫃檯買賣中心 OpenAPI。
+    盤後更新，非即時報價。
+  </p>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
