@@ -258,6 +258,20 @@
   //  搜尋
   // ═══════════════════════════════════════════════════════
   function search(kw) {
+    const raw = kw.trim();
+    let out = rawSearch(raw);
+    // 選定股票後搜尋框會留著「2330 台積電」，使用者接著打字就變成搜不到的字串。
+    // 這時改用其中任一段重新尋找，讓輸入不會卡住。
+    if (!out.length && /\s/.test(raw)) {
+      for (const part of raw.split(/\s+/)) {
+        out = rawSearch(part);
+        if (out.length) break;
+      }
+    }
+    return out;
+  }
+
+  function rawSearch(kw) {
     kw = kw.trim().toLowerCase();
     if (!kw) return [];
     const starts = [], contains = [];
@@ -272,9 +286,16 @@
     return [...starts, ...contains].slice(0, 12);
   }
 
-  function showSuggest(list) {
+  function showSuggest(list, kw) {
     sugIdx = -1;
-    if (!list.length) { el.suggest.hidden = true; return; }
+    if (!list.length) {
+      const q = (kw || "").trim();
+      if (!q) { el.suggest.hidden = true; return; }
+      el.suggest.innerHTML =
+        `<li class="no-hit">找不到「${q}」——請輸入股票代號或公司名稱</li>`;
+      el.suggest.hidden = false;
+      return;
+    }
     el.suggest.innerHTML = list.map((s) => `
       <li data-code="${s.c}">
         <span class="s-code">${s.c}</span>
@@ -282,7 +303,7 @@
         <span class="s-meta">${s.m}　${fmt(s.p)} 元</span>
       </li>`).join("");
     el.suggest.hidden = false;
-    el.suggest.querySelectorAll("li").forEach((li) =>
+    el.suggest.querySelectorAll("li[data-code]").forEach((li) =>
       li.addEventListener("mousedown", (e) => { e.preventDefault(); select(li.dataset.code); }));
   }
 
@@ -456,18 +477,26 @@
     if (current) { current = INDEX.get(current.c) || current; render(); }
 
     const done = [], failed = [];
-    (twseRows.length ? done : failed).push(
-      twseRows.length ? `上市 ${twseRows.length} 檔（${twseDate}）` : "上市");
-    (tpexRows.length ? done : failed).push(
-      tpexRows.length ? `上櫃 ${tpexRows.length} 檔（${tpexDate}）` : "上櫃");
+    (twseRows.length ? done : failed).push("上市");
+    (tpexRows.length ? done : failed).push("上櫃");
 
-    if (!failed.length) {
-      showNote("ok", "已抓到最新資料", `已更新 ${done.join("、")}。`);
+    // 沒抓到的市場，如果日期已經跟這次抓到的交易日一致，就沒有任何資料落後，
+    // 不需要拿警告去嚇人——那只是「本來就已經是最新的，不必更新」。
+    const newest = [twseDate, tpexDate].filter(Boolean).sort().pop();
+    const stale = failed.filter((m) => TRADE_DATE[m] && newest && TRADE_DATE[m] < newest);
+    const total = done.map((m) => `${m} ${m === "上市" ? twseRows.length : tpexRows.length} 檔`);
+
+    if (!stale.length) {
+      showNote("ok", "已是最新資料",
+        failed.length
+          ? `重新抓取了${total.join("、")}，${failed.join("、")}原本就已經是 ${newest}
+             的收盤資料，不需要更新。全站 ${STOCKS.length} 檔都是最新的。`
+          : `已更新 ${total.join("、")}，資料日 ${newest}。`);
     } else {
-      showNote("warn", "只更新了部分市場",
-        `已更新 ${done.join("、")}；<b>${failed.join("、")}</b>的代理連線失敗，
-         這部分仍顯示每日自動更新的資料（${failed.map((m) => TRADE_DATE[m] || "—").join("、")}），
-         數字依然可用。`);
+      showNote("warn", `${stale.join("、")}沒有更新到`,
+        `已重新抓取${total.join("、")}（${newest}）；<b>${stale.join("、")}</b>的代理連線失敗，
+         仍顯示每日排程抓到的 ${stale.map((m) => TRADE_DATE[m]).join("、")} 資料。
+         這些數字本身是正確的，只是日期較舊。`);
     }
   }
 
@@ -511,14 +540,15 @@
   function bind() {
     el.q.addEventListener("input", () => {
       el.clearBtn.hidden = !el.q.value;
-      showSuggest(search(el.q.value));
+      showSuggest(search(el.q.value), el.q.value);
     });
+    // 聚焦時整串選起來，下一次打字直接覆蓋掉上次選定的「代號 名稱」
     el.q.addEventListener("focus", () => {
-      if (el.q.value) showSuggest(search(el.q.value));
+      if (el.q.value) { el.q.select(); showSuggest(search(el.q.value), el.q.value); }
     });
     el.q.addEventListener("blur", () => setTimeout(() => (el.suggest.hidden = true), 120));
     el.q.addEventListener("keydown", (e) => {
-      const items = [...el.suggest.querySelectorAll("li")];
+      const items = [...el.suggest.querySelectorAll("li[data-code]")];
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         if (!items.length) return;
         e.preventDefault();
