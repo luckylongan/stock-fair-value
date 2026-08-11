@@ -231,7 +231,11 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
 .gauge-scale span {
   position: absolute; transform: translateX(-50%); white-space: nowrap;
 }
-.gauge-scale b { color: var(--text-mid); font-weight: 650; }
+.gauge-scale b { font-weight: 650; }
+.gauge-scale i { font-style: normal; }
+#gScaleL b { color: var(--cheap); }
+#gScaleM b { color: var(--fair); }
+#gScaleR b { color: var(--rich); }
 .gauge-scale span::before {
   content: ""; position: absolute; top: -13px; left: 50%;
   width: 1px; height: 6px; background: var(--border);
@@ -347,6 +351,9 @@ details.card summary h3 { font-size: 15.5px; }
   .sum-cell strong { font-size: 21px; }
   .param-row label { flex: 1 1 100%; justify-content: space-between; }
   .param-row input[type="number"] { width: 96px; }
+  /* 窄螢幕只留數字，否則三個刻度會黏成一片 */
+  .gauge-scale { font-size: 10.5px; }
+  .gauge-scale i { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

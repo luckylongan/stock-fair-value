@@ -208,9 +208,10 @@
     el.tCheap.textContent = fmt(cheap);
     el.tFair.textContent = fmt(fair);
     el.tRich.textContent = fmt(rich);
-    el.gScaleL.innerHTML = "便宜 <b>" + fmt(cheap) + "</b>";
-    el.gScaleM.innerHTML = "合理 <b>" + fmt(fair) + "</b>";
-    el.gScaleR.innerHTML = "昂貴 <b>" + fmt(rich) + "</b>";
+    // <i> 內的文字在窄螢幕會被 CSS 隱藏，只留數字避免三個刻度擠在一起
+    el.gScaleL.innerHTML = "<i>便宜</i> <b>" + fmt(cheap) + "</b>";
+    el.gScaleM.innerHTML = "<i>合理</i> <b>" + fmt(fair) + "</b>";
+    el.gScaleR.innerHTML = "<i>昂貴</i> <b>" + fmt(rich) + "</b>";
     el.gaugePrice.textContent = fmt(s.p);
 
     if (cheap === null || !(cheap < rich)) {
