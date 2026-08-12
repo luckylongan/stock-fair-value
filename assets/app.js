@@ -201,16 +201,22 @@
     const b = usable(s, "pe");
     const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
     const mult = { 1: 4, 2: 2, 3: "4/3", 4: 1 }[f.q];
+    const risk = {
+      1: "只用一季實績推全年，外推成分最重，淡旺季或一次性損益會被放大四倍",
+      2: "以半年實績推全年，淡旺季影響仍需留意",
+      3: "已有前三季實績，外推誤差較小",
+      4: "已是全年實績，沒有外推",
+    }[f.q];
     return {
       cheap: eps * lo, fair: eps * mid, rich: eps * hi,
+      tag: `年化 · ${f.y}Q${f.q}`,
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`) +
-             `<span class="basis-src">${f.y}Q${f.q} 季報</span>`,
+             `<span class="basis-src">依 ${f.y}Q${f.q} 季報</span>`,
       formula:
         `年化 EPS ＝ ${f.y}Q${f.q} 累計 ${fmt(f.cum)} ÷ ${f.q} 季 × 4 ＝ ${fmt(raw)} 元` +
         (dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(dil, 4)} ＝ ${fmt(eps)} 元</span>` : "") +
         `<br>各價位 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
-        `<br><span class="formula-warn">※ 以 ${f.q} 季實績外推全年（×${mult}），` +
-        (f.q <= 2 ? "季數少，淡旺季或一次性損益會被放大" : "季數已過半，外推誤差較小") + "</span>",
+        `<br><span class="formula-warn">※ 以 ${f.q} 季實績外推全年（×${mult}）：${risk}</span>`,
     };
   }
 
@@ -285,7 +291,7 @@
           ${res.na ? "" :
             `<input type="checkbox" class="method-toggle" data-m="${m.id}" ${on ? "checked" : ""}
                     aria-label="是否納入綜合評估">`}
-          <h3>${m.name}${m.tag ? `<span class="m-tag">${m.tag}</span>` : ""}<span class="m-en">${m.en}</span></h3>
+          <h3>${m.name}${(res.tag || m.tag) ? `<span class="m-tag">${res.tag || m.tag}</span>` : ""}<span class="m-en">${m.en}</span></h3>
         </div>
         ${res.na
           ? `<p class="method-basis">—</p><p class="method-na">⚠︎ ${res.na}</p>`
