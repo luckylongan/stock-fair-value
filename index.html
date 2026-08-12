@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>合理股價估算器 ｜ 台股四大估價法</title>
-<meta name="description" content="以 ROE 法、股價淨值比法、股利法、本益比法估算台股合理價，資料取自證交所與櫃買中心當日公開資訊。">
+<title>合理股價估算器 ｜ 台股五大估價法</title>
+<meta name="description" content="以本益比法（年化／近四季）、ROE 法、股價淨值比法、股利法估算台股合理價，資料取自證交所與櫃買中心當日公開資訊。">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 </head>
@@ -16,7 +16,7 @@
       <span class="brand-mark">📈</span>
       <div>
         <h1>合理股價估算器</h1>
-        <p class="brand-sub">ROE 法 ｜ 股價淨值比法 ｜ 股利法 ｜ 本益比法</p>
+        <p class="brand-sub">本益比法（年化／近四季） ｜ ROE 法 ｜ 股價淨值比法 ｜ 股利法</p>
       </div>
     </div>
     <div class="topbar-actions">
@@ -114,7 +114,7 @@
       <p id="verdict" class="verdict">—</p>
     </div>
 
-    <!-- 四大估價法 -->
+    <!-- 五大估價法 -->
     <div id="methods" class="methods"></div>
 
     <!-- 參數 -->
@@ -129,13 +129,13 @@
             <span>優先使用「該股自身的歷史評價區間」（近 5 年 P20 / P50 / P80）</span>
           </label>
           <p class="param-note">
-            關閉後，本益比法、股價淨值比法、股利法一律改用下方的固定倍數。
+            關閉後，兩種本益比法、股價淨值比法、股利法一律改用下方的固定倍數。
             上櫃股票因來源未提供歷史資料，一律使用固定倍數。
           </p>
         </div>
 
         <div class="param-group">
-          <h4>本益比法（無歷史資料時）</h4>
+          <h4>本益比法（無歷史資料時，年化版與近四季版共用）</h4>
           <div class="param-row">
             <label>便宜 <input type="number" id="pPeLo" value="10" min="1" max="100" step="0.5"> 倍</label>
             <label>合理 <input type="number" id="pPeMid" value="15" min="1" max="100" step="0.5"> 倍</label>
@@ -178,9 +178,21 @@
 
     <!-- 方法說明 -->
     <details class="card explain">
-      <summary><h3>四種估價法怎麼算？</h3></summary>
+      <summary><h3>五種估價法怎麼算？</h3></summary>
       <div class="explain-body">
-        <h4>1. ROE 法（股東權益報酬率法）</h4>
+        <h4>1. 本益比法 —— 年化 EPS（Forward P/E）</h4>
+        <p>交易所的本益比是用<strong>近四季 EPS</strong> 算的，反映過去一整年；
+           獲利正在成長或衰退的公司，近四季會落後於現況。這個方法改用最新一期
+           季報的當年度累計每股盈餘，把它年化成全年預估：</p>
+        <pre>年化 EPS = 當年度累計 EPS ÷ 季別 × 4
+合理價 = 年化 EPS × 合理本益比</pre>
+        <p>Q1 乘 4、Q2 乘 2、Q3 乘 4/3、Q4 就是全年。<strong>季數越少，外推成分越重</strong>，
+           淡旺季明顯或有一次性損益的公司容易失真，卡片上會標明是用幾季推的。
+           倍數與下方的近四季本益比法一樣，優先取該股近 5 年區間。</p>
+        <p>各公司申報時間不同，交易所的 API 又只提供最新一期，所以本站每日累積；
+           還沒申報的公司此法會顯示不適用，等它申報後就會自動出現。</p>
+
+        <h4>2. ROE 法（股東權益報酬率法）</h4>
         <p>用公司「幫股東賺錢的效率」反推它的淨值該值多少倍。由高登成長模型推導：</p>
         <pre>合理股價淨值比 = (ROE − g) ÷ (r − g)
 合理價 = 每股淨值 × 合理股價淨值比</pre>
@@ -188,18 +200,18 @@
            低於 r 時則該打折。便宜價與昂貴價再以安全邊際上下調整。
            <strong>ROE 必須大於 g</strong> 才有意義。</p>
 
-        <h4>2. 股價淨值比法（P/B Ratio）</h4>
+        <h4>3. 股價淨值比法（P/B Ratio）</h4>
         <pre>合理價 = 每股淨值 × 合理股價淨值比</pre>
         <p>倍數優先取該股近 5 年的 P20 / P50 / P80。適合資產型、獲利波動大的公司
            （金融、營建、景氣循環股），因為淨值比盈餘穩定。</p>
 
-        <h4>3. 股利法（現金股利折現）</h4>
+        <h4>4. 股利法（現金股利折現）</h4>
         <pre>合理價 = 每股現金股利 ÷ 目標殖利率</pre>
         <p>殖利率越高代表股價越便宜，所以「便宜價」用最高的殖利率去除。
            經典做法是股利的 16 倍（6.25%）、20 倍（5%）、32 倍（3.125%）。
            適合配息穩定的成熟公司；不配息或配息斷斷續續的股票不適用。</p>
 
-        <h4>4. 本益比法（P/E Ratio）</h4>
+        <h4>5. 本益比法 —— 近四季 EPS（Trailing P/E）</h4>
         <pre>合理價 = 近四季 EPS × 合理本益比</pre>
         <p>最直覺的方法，倍數同樣優先取該股自身近 5 年區間。
            虧損（EPS 為負或無本益比）時不適用；獲利大起大落的公司也容易失真。</p>

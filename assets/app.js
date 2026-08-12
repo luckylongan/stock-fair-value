@@ -9,6 +9,7 @@
   let STOCKS = [];        // 全市場個股
   let BANDS = {};         // 代號 -> {pe:[P20,P50,P80], pb:[...], y:[...]}
   let EXRIGHTS = {};      // 代號 -> [{d:除權日, k:配股率, cash:現金股利}]
+  let QUARTERLY = {};     // 代號 -> {y:年度, q:季別, cum:當年度累計 EPS}
   let INDEX = new Map();  // 代號 -> 個股
   let current = null;     // 目前選定的個股
   let sugIdx = -1;        // 建議清單游標
@@ -62,14 +63,11 @@
     return (+m[1] + 1911) + "-" + ["03-31", "06-30", "09-30", "12-31"][+m[2] - 1];
   }
 
-  function dilutionOf(s) {
-    const evs = EXRIGHTS[s.c];
-    if (!evs || !evs.length) return null;
+  /** 算出某檔股票在指定財報基準日之後、累積至今的配股攤薄倍數。 */
+  function dilutionSince(code, cut, approx) {
+    const evs = EXRIGHTS[code];
+    if (!evs || !evs.length || !cut) return null;
     const today = todayISO();
-    // 沒有財報季資訊時（上櫃），用 150 天回看當作近似
-    const cut = fiscalEnd(s.fq) ||
-      new Date(Date.now() + 8 * 3600e3 - 150 * 86400e3).toISOString().slice(0, 10);
-
     // 只算「已經除權、且晚於財報基準日」的事件；未來的除權還沒影響股價
     const after = evs.filter((e) => e.d > cut && e.d <= today);
     if (!after.length) return null;
@@ -78,7 +76,15 @@
     const unknown = after.filter((e) => e.k == null);
     const factor = known.reduce((a, e) => a * (1 + e.k), 1);
     if (factor <= 1 && !unknown.length) return null;
-    return { factor, known, unknown, approx: !fiscalEnd(s.fq) };
+    return { factor, known, unknown, approx: !!approx };
+  }
+
+  function dilutionOf(s) {
+    const fe = fiscalEnd(s.fq);
+    // 沒有財報季資訊時（上櫃），用 150 天回看當作近似
+    const cut = fe ||
+      new Date(Date.now() + 8 * 3600e3 - 150 * 86400e3).toISOString().slice(0, 10);
+    return dilutionSince(s.c, cut, !fe);
   }
 
   /** 回傳套用攤薄後的個股副本；ROE 是比值，不受攤薄影響。 */
@@ -166,6 +172,48 @@
     };
   }
 
+  /* 0. 本益比法（年化 EPS）—— 用最新一期季報推估全年獲利
+   *
+   *    交易所的本益比是拿「近四季 EPS」算的，反映過去一整年；獲利正在
+   *    成長或衰退的公司，近四季會落後現況。這裡改用最新一期季報的
+   *    當年度累計 EPS 年化：
+   *
+   *      年化 EPS = 當年度累計 EPS ÷ 季別 × 4
+   *
+   *    Q1 ×4、Q2 ×2、Q3 ×4/3、Q4 ×1。季數越少，外推的成分越重。
+   */
+  function methodPeFwd(s) {
+    const f = QUARTERLY[s.c];
+    if (!f) {
+      return { na: "尚無季報資料（公司申報進度不一，本站每日累積），此法暫不適用。" };
+    }
+    if (!(f.cum > 0)) {
+      return { na: `最新季報（${f.y}Q${f.q}）累計每股盈餘為 ${fmt(f.cum)} 元，` +
+                   "虧損無法年化，此法不適用。" };
+    }
+    const raw = (f.cum / f.q) * 4;
+
+    // 季報的每股盈餘同樣不會反映季末之後才發生的配股，比照做攤薄
+    const adj = dilutionSince(s.c, fiscalEnd(`${f.y}/${f.q}`), false);
+    const dil = adj && adj.factor > 1 ? adj.factor : 1;
+    const eps = raw / dil;
+
+    const b = usable(s, "pe");
+    const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
+    const mult = { 1: 4, 2: 2, 3: "4/3", 4: 1 }[f.q];
+    return {
+      cheap: eps * lo, fair: eps * mid, rich: eps * hi,
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`) +
+             `<span class="basis-src">${f.y}Q${f.q} 季報</span>`,
+      formula:
+        `年化 EPS ＝ ${f.y}Q${f.q} 累計 ${fmt(f.cum)} ÷ ${f.q} 季 × 4 ＝ ${fmt(raw)} 元` +
+        (dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(dil, 4)} ＝ ${fmt(eps)} 元</span>` : "") +
+        `<br>各價位 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `<br><span class="formula-warn">※ 以 ${f.q} 季實績外推全年（×${mult}），` +
+        (f.q <= 2 ? "季數少，淡旺季或一次性損益會被放大" : "季數已過半，外推誤差較小") + "</span>",
+    };
+  }
+
   /* 4. 本益比法 —— 近四季 EPS × 合理本益比 */
   function methodPe(s) {
     if (!s.eps) return { na: "來源未提供本益比（通常代表近四季為虧損），本益比法不適用。" };
@@ -194,10 +242,11 @@
   }
 
   const METHODS = [
+    { id: "pefwd", name: "本益比法", tag: "年化 EPS", en: "Forward P/E", fn: methodPeFwd },
     { id: "roe", name: "ROE 法", en: "Return on Equity", fn: methodRoe },
     { id: "pb", name: "股價淨值比法", en: "P/B Ratio", fn: methodPb },
     { id: "div", name: "股利法", en: "Dividend", fn: methodDiv },
-    { id: "pe", name: "本益比法", en: "P/E Ratio", fn: methodPe },
+    { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
   ];
 
   // ═══════════════════════════════════════════════════════
@@ -236,7 +285,7 @@
           ${res.na ? "" :
             `<input type="checkbox" class="method-toggle" data-m="${m.id}" ${on ? "checked" : ""}
                     aria-label="是否納入綜合評估">`}
-          <h3>${m.name}<span class="m-en">${m.en}</span></h3>
+          <h3>${m.name}${m.tag ? `<span class="m-tag">${m.tag}</span>` : ""}<span class="m-en">${m.en}</span></h3>
         </div>
         ${res.na
           ? `<p class="method-basis">—</p><p class="method-na">⚠︎ ${res.na}</p>`
@@ -333,7 +382,7 @@
     let cls, txt;
     if (s.p < cheap) {
       cls = "is-cheap";
-      txt = `現價 <b>${fmt(s.p)}</b> 元<b>低於便宜價 ${fmt(cheap)}</b> 元，${vs}，在四法整合的區間中屬於<b>便宜</b>位階。`;
+      txt = `現價 <b>${fmt(s.p)}</b> 元<b>低於便宜價 ${fmt(cheap)}</b> 元，${vs}，在各法整合的區間中屬於<b>便宜</b>位階。`;
     } else if (s.p < fair) {
       cls = "is-cheap";
       txt = `現價 <b>${fmt(s.p)}</b> 元位於便宜價與合理價之間，${vs}，屬<b>合理偏低</b>位階。`;
@@ -434,7 +483,7 @@
 
   async function boot() {
     try {
-      const [latest, bands, exr] = await Promise.all([
+      const [latest, bands, exr, qtr] = await Promise.all([
         fetch("data/latest.json?t=" + Date.now()).then((r) => {
           if (!r.ok) throw new Error("latest.json " + r.status);
           return r.json();
@@ -443,10 +492,13 @@
                                                 .catch(() => null),
         fetch("data/exrights.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
                                                    .catch(() => null),
+        fetch("data/quarterly.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
+                                                    .catch(() => null),
       ]);
       ingest(latest);
       if (bands && bands.bands) BANDS = bands.bands;
       if (exr && exr.events) EXRIGHTS = exr.events;
+      if (qtr && qtr.eps) QUARTERLY = qtr.eps;
       el.loading.hidden = true;
 
       const hash = decodeURIComponent(location.hash.replace("#", "")).trim();
