@@ -38,6 +38,9 @@
 }
 
 * { box-sizing: border-box; }
+/* hidden 屬性只給 display:none 的預設值，會被元素自己的 display 規則蓋掉，
+   所以明確宣告一次，否則設了 display:flex 的元素隱藏不了 */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;

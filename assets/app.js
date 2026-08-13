@@ -1,4 +1,4 @@
-/* 合理股價估算器
+/* 幾塊你要買？ —— 台股合理價估算
  * 四種估價法：ROE 法、股價淨值比法、股利法、本益比法
  * 資料：data/latest.json（每日由 GitHub Actions 更新）＋ data/bands.json（近 5 年評價區間）
  */
