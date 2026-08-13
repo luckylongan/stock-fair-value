@@ -48,6 +48,11 @@ jobs:
         run: python3 scripts/fetch_quarterly.py
         continue-on-error: true
 
+      # 每月 10 日前公布上月營收，是最即時的基本面資料
+      - name: 收集每月營業收入
+        run: python3 scripts/fetch_revenue.py
+        continue-on-error: true
+
       - name: 重建歷史評價區間（僅在手動勾選或每月 1 日）
         if: github.event.inputs.rebuild_bands == 'true' || github.run_number == 1
         run: python3 scripts/build_bands.py --years 5

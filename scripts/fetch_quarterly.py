@@ -97,10 +97,16 @@ def collect(url_tmpl, market):
             y, q = fnum(pick(r, "年度", "Year")), fnum(pick(r, "季別", "Season"))
             if eps is None or not y or not q:
                 continue
+            rev = fnum(r.get("營業收入"))
+            net = next((fnum(r[k]) for k in r
+                        if k.startswith("淨利") and "歸屬於母公司業主" in k), None)
             key = (int(y), int(q))
             cur = out.get(code)
             if cur is None or key > (cur["y"], cur["q"]):
-                out[code] = {"y": int(y), "q": int(q), "cum": round(eps, 4), "m": market}
+                out[code] = {"y": int(y), "q": int(q), "cum": round(eps, 4),
+                             "rev": round(rev, 2) if rev and rev > 0 else None,
+                             "ni": round(net, 2) if net else None,
+                             "m": market}
                 n += 1
         print("   %-6s %4d 筆" % (sec, n))
         time.sleep(0.3)
@@ -133,10 +139,10 @@ def strip_tags(s):
 
 
 def parse_mops(page):
-    """從 t163sb04 的 HTML 取出 {代號: 基本每股盈餘}。
+    """從 t163sb04 的 HTML 取出 {代號: {eps, rev}}。
 
     回傳頁面依產業拆成好幾張表，各表欄位數不同，所以逐表用表頭定位欄位，
-    而不是寫死索引。
+    而不是寫死索引。金融保險業沒有「營業收入」（是利息淨收益），rev 會是 None。
     """
     out = {}
     for tbl in re.findall(r"<table[^>]*>.*?</table>", page, re.S):
@@ -153,6 +159,11 @@ def parse_mops(page):
         ei = next((j for j, h in enumerate(hdr) if h.startswith("基本每股盈餘")), None)
         if ei is None:
             continue
+        # 精確比對「營業收入」，避開「營業外收入及支出」
+        ri = hdr.index("營業收入") if "營業收入" in hdr else None
+        # 淨利欄名有「淨利（淨損）歸屬於母公司業主」與「淨利（損）…」兩種寫法
+        ni = next((j for j, h in enumerate(hdr)
+                   if h.startswith("淨利") and "歸屬於母公司業主" in h), None)
         for r in rows[1:]:
             cells = [strip_tags(c) for c in
                      re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, re.S)]
@@ -162,8 +173,13 @@ def parse_mops(page):
             if len(code) != 4 or not code.isdigit():
                 continue
             eps = fnum(cells[ei])
-            if eps is not None:
-                out[code] = eps
+            if eps is None:
+                continue
+            rev = fnum(cells[ri]) if (ri is not None and len(cells) > ri) else None
+            net = fnum(cells[ni]) if (ni is not None and len(cells) > ni) else None
+            out[code] = {"eps": round(eps, 4),
+                         "rev": round(rev, 2) if rev and rev > 0 else None,
+                         "ni": round(net, 2) if net else None}
     return out
 
 
@@ -175,10 +191,12 @@ def collect_mops(year, season, typek, market):
     if not page or "每股盈餘" not in page:
         print("   %s %d/Q%d  無資料" % (market, year, season))
         return {}
-    eps = parse_mops(page)
-    print("   %s %d/Q%d  %4d 筆" % (market, year, season, len(eps)))
-    return {c: {"y": year, "q": season, "cum": round(v, 4), "m": market}
-            for c, v in eps.items()}
+    rows = parse_mops(page)
+    nrev = sum(1 for v in rows.values() if v["rev"])
+    print("   %s %d/Q%d  %4d 筆（含營收 %d）" % (market, year, season, len(rows), nrev))
+    return {c: {"y": year, "q": season, "cum": v["eps"], "rev": v["rev"],
+                "ni": v["ni"], "m": market}
+            for c, v in rows.items()}
 
 
 def load_existing():
@@ -202,12 +220,27 @@ def recent_periods(n=3):
     return list(reversed(out))
 
 
+def annual_periods(back=2):
+    """過去 n 個年度的 Q4（全年結算），供計算年增率用。"""
+    y = datetime.now(TPE).year - 1911
+    return [(y - i, 4) for i in range(1, back + 2)]
+
+
 def main():
     batches = []
+    old = load_existing() or {}
+    history = {k: dict(v) for k, v in (old.get("history") or {}).items()}
 
-    # 先用觀測站逐季回補（由舊到新），還沒送最新一季的公司才不會整個消失
+    # 最近三季每天都要抓：公司陸續申報，內容會變
+    periods = list(recent_periods(3))
+    # 年度基準（Q4 全年）只用來算成長率，抓過就不必重抓
+    for y, q in annual_periods(2):
+        key = "%d/%d" % (y, q)
+        if sum(1 for h in history.values() if key in h) < 100:
+            periods.append((y, q))
+
     print("== 公開資訊觀測站（逐季回補）==")
-    for y, q in recent_periods(3):
+    for y, q in periods:
         for typek, market in (("sii", "上市"), ("otc", "上櫃")):
             batches.append(collect_mops(y, q, typek, market))
             time.sleep(1.5)
@@ -219,24 +252,50 @@ def main():
     print("  上櫃")
     batches.append(collect(TPEX_URL, "上櫃"))
 
-    merged = dict((load_existing() or {}).get("eps", {}))
+    merged = dict(old.get("eps", {}))
     added = updated = 0
     for code, e in [kv for b in batches for kv in b.items()]:
+        # 逐期保存，PEG 需要用歷年同期比較成長率
+        h = history.setdefault(code, {})
+        rec = {"e": e["cum"]}
+        if e.get("rev"):
+            rec["r"] = e["rev"]
+        if e.get("ni"):
+            rec["n"] = e["ni"]
+        h["%d/%d" % (e["y"], e["q"])] = rec
+
         cur = merged.get(code)
         if cur is None:
             merged[code] = e; added += 1
         elif (e["y"], e["q"]) > (cur["y"], cur["q"]):
             merged[code] = e; updated += 1
+        elif (e["y"], e["q"]) == (cur["y"], cur["q"]) and (
+                (cur.get("rev") is None and e.get("rev") is not None) or
+                (cur.get("ni") is None and e.get("ni") is not None)):
+            # 同一期但補到了營收／淨利（舊版檔案沒有這些欄），一併補上
+            merged[code] = e; updated += 1
+
+    # 歷史只留最近 12 期，避免檔案無限膨脹
+    for code, h in history.items():
+        if len(h) > 12:
+            keep = sorted(h, key=lambda k: tuple(int(x) for x in k.split("/")),
+                          reverse=True)[:12]
+            history[code] = {k: h[k] for k in keep}
 
     from collections import Counter
     dist = Counter((e["y"], e["q"]) for e in merged.values())
+    hdist = Counter(k for h in history.values() for k in h)
     out = {
         "updated_at": datetime.now(TPE).strftime("%Y-%m-%d %H:%M:%S+08:00"),
-        "note": ("cum 為該公司當年度累計基本每股盈餘（非單季）；"
-                 "年化 EPS = cum ÷ q × 4。各公司申報進度不同，本檔逐次累積。"),
+        "note": ("cum 為該公司當年度累計基本每股盈餘（非單季），rev 為累計營業收入、"
+                 "ni 為歸屬母公司累計淨利（皆千元，金融保險業無 rev）；"
+                 "年化 EPS = cum ÷ q × 4；每股營收 = cum × rev ÷ ni。"
+                 "history 逐期保存，供計算年增率。各公司申報進度不同，本檔逐次累積。"),
         "count": len(merged),
         "periods": {"%d/%d" % k: v for k, v in sorted(dist.items(), reverse=True)},
+        "history_periods": dict(sorted(hdist.items(), reverse=True)),
         "eps": merged,
+        "history": history,
     }
     os.makedirs(OUT_DIR, exist_ok=True)
     path = os.path.join(OUT_DIR, "quarterly.json")
