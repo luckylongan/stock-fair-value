@@ -405,15 +405,16 @@
       : `<span class="basis-tag">固定倍數</span>${txt}`;
   }
 
+  // 依估價基礎分組：本益比家族 → 淨值類 → 營收類 → 股利類
   const METHODS = [
     { id: "pefwd", name: "本益比法", tag: "年化 EPS", en: "Forward P/E", fn: methodPeFwd },
-    { id: "rev", name: "月營收動能法", en: "Revenue Momentum", fn: methodRevenue },
+    { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
     { id: "peg", name: "本益成長比", en: "PEG Ratio", fn: methodPeg },
+    { id: "rev", name: "月營收動能法", en: "Revenue Momentum", fn: methodRevenue },
     { id: "roe", name: "ROE 法", en: "Return on Equity", fn: methodRoe },
     { id: "pb", name: "股價淨值比法", en: "P/B Ratio", fn: methodPb },
     { id: "ps", name: "股價營收比", en: "P/S Ratio", fn: methodPs },
     { id: "div", name: "股利法", en: "Dividend", fn: methodDiv },
-    { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
   ];
 
   // ═══════════════════════════════════════════════════════
