@@ -1,6 +1,10 @@
-/* 幾塊你要買？ —— 台股合理價估算
- * 四種估價法：ROE 法、股價淨值比法、股利法、本益比法
- * 資料：data/latest.json（每日由 GitHub Actions 更新）＋ data/bands.json（近 5 年評價區間）
+/* 幾塊你要買？ —— 台股財務計算工具箱
+ *
+ * 定位：對公開財務數字做機械式的乘除運算並顯示結果。
+ * 倍數、成長率、目標殖利率等假設一律由使用者設定，本站不替任何個股
+ * 設定「應該」的價位，也不對計算結果作評價或給買賣建議。
+ *
+ * 資料：證交所／櫃買中心／公開資訊觀測站之公開資料，每交易日更新。
  */
 (() => {
   "use strict";
@@ -25,6 +29,8 @@
     psLo: 0.6, psMid: 1.2, psHi: 2.5,
     pegLo: 0.75, pegMid: 1, pegHi: 1.5,
     gCap: 40,
+    customEps: 0,        // >0 時覆寫所有預估型 EPS，0 = 用網站算的
+    grahamG: 5, grahamSpan: 2,
   };
   // 加了新方法就換 key：舊的儲存值不含新方法，沿用會讓預設關閉的項目被誤開
   const OFF_KEY = "fv_off_methods_v2";
@@ -118,13 +124,14 @@
   }
 
   // ═══════════════════════════════════════════════════════
-  //  四種估價法
-  //  每個方法回傳 {cheap, fair, rich, basis, formula} 或 {na: "不適用原因"}
+  //  計算公式
+  //  每個公式回傳 {cheap, fair, rich, labels, basis, formula} 或 {na: "無法計算的原因"}
+  //  cheap/fair/rich 只是「低／中／高參數」三組輸入對應的輸出，不含價值判斷。
   // ═══════════════════════════════════════════════════════
 
-  /* 1. ROE 法 —— 由高登成長模型推導出合理股價淨值比
-   *    合理 P/B = (ROE − g) / (r − g)，再乘上每股淨值。
-   *    便宜 / 昂貴價以安全邊際上下調整。 */
+  /* 1. ROE 法 —— 由高登成長模型推導出對應的股價淨值比
+   *    P/B = (ROE − g) / (r − g)，再乘上每股淨值。
+   *    上下限由使用者設定的安全邊際決定。 */
   function methodRoe(s) {
     if (!s.bvps) return { na: "缺少每股淨值資料（無股價淨值比），無法估算。" };
     if (!s.roe) return { na: "缺少 ROE（需要本益比與股價淨值比同時存在），多因公司虧損。" };
@@ -138,47 +145,50 @@
     const fair = s.bvps * pbFair, m = params.mos / 100;
     return {
       cheap: fair * (1 - m), fair, rich: fair * (1 + m),
-      basis: `<span class="basis-tag">參數</span>r ${fmt(params.r, 1)}%　g ${fmt(params.g, 1)}%　安全邊際 ${fmt(params.mos, 0)}%`,
+      labels: [`P/B ${fmt(pbFair * (1 - m))} 倍`, `P/B ${fmt(pbFair)} 倍`, `P/B ${fmt(pbFair * (1 + m))} 倍`],
+      basis: `<span class="basis-tag">你的參數</span>r ${fmt(params.r, 1)}%　g ${fmt(params.g, 1)}%　安全邊際 ${fmt(params.mos, 0)}%`,
       formula:
-        `合理 P/B ＝ (ROE ${fmt(s.roe)}% − g ${fmt(params.g, 1)}%) ÷ (r ${fmt(params.r, 1)}% − g ${fmt(params.g, 1)}%) ＝ ${fmt(pbFair)} 倍` +
+        `模型 P/B ＝ (ROE ${fmt(s.roe)}% − g ${fmt(params.g, 1)}%) ÷ (r ${fmt(params.r, 1)}% − g ${fmt(params.g, 1)}%) ＝ ${fmt(pbFair)} 倍` +
         (s._adj && s._adj.factor > 1
           ? `<br>每股淨值 ${fmt(s._rawBvps)} 依配股攤薄 → ${fmt(s.bvps)} 元` : "") +
-        `<br>合理價 ＝ 每股淨值 ${fmt(s.bvps)} × ${fmt(pbFair)} ＝ ${fmt(fair)} 元<br>` +
-        `便宜 / 昂貴價 ＝ 合理價 × (1 ∓ ${fmt(params.mos, 0)}%)`,
+        `<br>對應價 ＝ 每股淨值 ${fmt(s.bvps)} × ${fmt(pbFair)} ＝ ${fmt(fair)} 元<br>` +
+        `上下限 ＝ 對應價 × (1 ∓ 安全邊際 ${fmt(params.mos, 0)}%)`,
     };
   }
 
-  /* 2. 股價淨值比法 —— 每股淨值 × 合理 P/B 倍數 */
+  /* 2. 股價淨值比法 —— 每股淨值 × 你選定的 P/B 倍數 */
   function methodPb(s) {
     if (!s.bvps) return { na: "來源未提供股價淨值比，無法推算每股淨值。" };
     const b = usable(s, "pb");
     const [lo, mid, hi] = b || [params.pbLo, params.pbMid, params.pbHi];
     return {
       cheap: s.bvps * lo, fair: s.bvps * mid, rich: s.bvps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`),
       formula:
         `每股淨值 ＝ 收盤價 ${fmt(s.p)} ÷ 股價淨值比 ${fmt(s.pb)} ＝ ${fmt(s._rawBvps || s.bvps)} 元` +
         dilutionNote(s) +
-        `<br>各價位 ＝ ${fmt(s.bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+        `<br>對應價 ＝ ${fmt(s.bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
     };
   }
 
-  /* 3. 股利法 —— 每股現金股利 ÷ 目標殖利率
-   *    殖利率越高＝股價越便宜，所以便宜價用最高的殖利率去除。 */
+  /* 3. 股利法 —— 每股現金股利 ÷ 你設定的目標殖利率
+   *    殖利率與股價成反比，故最高的殖利率對應最低的價格。 */
   function methodDiv(s) {
     if (!s.d) return { na: "近一年無現金股利（或殖利率為 0），股利法不適用。" };
     const b = usable(s, "y");
-    // 歷史區間為 [P20, P50, P80]；殖利率高對應便宜價，故取用時左右對調
+    // 歷史區間為 [P20, P50, P80]；殖利率與價格成反比，故取用時左右對調
     const yCheap = b ? b[2] : params.yHi;
     const yFair = b ? b[1] : params.yMid;
     const yRich = b ? b[0] : params.yLo;
     return {
       cheap: s.d / (yCheap / 100), fair: s.d / (yFair / 100), rich: s.d / (yRich / 100),
+      labels: [`殖利率 ${fmt(yCheap)}%`, `殖利率 ${fmt(yFair)}%`, `殖利率 ${fmt(yRich)}%`],
       basis: basisTag(b, `殖利率 ${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%`),
       formula:
         `每股現金股利 ＝ 收盤價 ${fmt(s.p)} × 殖利率 ${fmt(s.y)}% ＝ ${fmt(s.d)} 元<br>` +
-        `便宜價 ＝ ${fmt(s.d)} ÷ ${fmt(yCheap)}%（殖利率越高股價越便宜）<br>` +
-        `合理 / 昂貴價 ＝ ${fmt(s.d)} ÷ ${fmt(yFair)}% / ${fmt(yRich)}%`,
+        `對應價 ＝ ${fmt(s.d)} ÷ ${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%<br>` +
+        `（殖利率與價格成反比，殖利率越高對應的價格越低）`,
     };
   }
 
@@ -193,6 +203,20 @@
    *    Q1 ×4、Q2 ×2、Q3 ×4/3、Q4 ×1。季數越少，外推的成分越重。
    */
   function methodPeFwd(s) {
+    if (params.customEps > 0) {
+      const b0 = usable(s, "pe");
+      const [l0, m0, h0] = b0 || [params.peLo, params.peMid, params.peHi];
+      const e0 = params.customEps;
+      return {
+        cheap: e0 * l0, fair: e0 * m0, rich: e0 * h0,
+        labels: [`${fmt(l0)} 倍`, `${fmt(m0)} 倍`, `${fmt(h0)} 倍`],
+        tag: "你輸入的 EPS",
+        basis: basisTag(b0, `${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍`) +
+               `<span class="basis-src">EPS ${fmt(e0)} 元（自訂）</span>`,
+        formula: `對應價 ＝ 你輸入的 EPS ${fmt(e0)} × ${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍` +
+                 `<br><span class="formula-warn">※ 目前使用自訂 EPS，清空參數區的欄位即可改回依季報計算</span>`,
+      };
+    }
     const f = QUARTERLY[s.c];
     if (!f) {
       return { na: "尚無季報資料（公司申報進度不一，本站每日累積），此法暫不適用。" };
@@ -219,19 +243,27 @@
     }[f.q];
     return {
       cheap: eps * lo, fair: eps * mid, rich: eps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
       tag: `年化 · ${f.y}Q${f.q}`,
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`) +
              `<span class="basis-src">依 ${f.y}Q${f.q} 季報</span>`,
       formula:
         `年化 EPS ＝ ${f.y}Q${f.q} 累計 ${fmt(f.cum)} ÷ ${f.q} 季 × 4 ＝ ${fmt(raw)} 元` +
         (dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(dil, 4)} ＝ ${fmt(eps)} 元</span>` : "") +
-        `<br>各價位 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `<br>對應價 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
         `<br><span class="formula-warn">※ 以 ${f.q} 季實績外推全年（×${mult}）：${risk}</span>`,
     };
   }
 
-  /** 推估今年全年 EPS：優先用月營收（最即時），退而用季報年化。 */
+  /** 推估今年全年 EPS。
+   *  使用者若在參數區填了自訂 EPS，一律以它為準 —— 這是刻意的：
+   *  預估值是假設，應該由使用者自己決定，網站算的只是預設起點。
+   */
   function estimateAnnualEps(s) {
+    if (params.customEps > 0) {
+      return { eps: params.customEps, raw: params.customEps, dil: 1,
+               src: "自訂", custom: true };
+    }
     const f = QUARTERLY[s.c], r = REVENUE[s.c];
     if (!f || !(f.cum > 0)) return null;
     let raw, src;
@@ -280,6 +312,7 @@
       `，累計營收年增 <b>${fmt(r.yoy, 1)}%</b>`;
     return {
       cheap: est.eps * lo, fair: est.eps * mid, rich: est.eps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
       tag: `營收 · ${ym}`,
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`) +
              `<span class="basis-src">依 ${ym} 月營收</span>`,
@@ -288,7 +321,7 @@
         `每元營收獲利 ＝ ${f.y}Q${f.q} EPS ${fmt(f.cum)} ÷ 營收 ${fmt(f.rev / 1e6, 1)} 億<br>` +
         `推估年 EPS ＝ ${fmt(annualRev / 1e6, 1)} 億 × 該比率 ＝ ${fmt(est.raw)} 元` +
         (est.dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(est.dil, 4)} ＝ ${fmt(est.eps)} 元</span>` : "") +
-        `<br>各價位 ＝ ${fmt(est.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `<br>對應價 ＝ ${fmt(est.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
         `<br><span class="formula-warn">※ 假設今年淨利率與季報一致；毛利率若明顯變動會失準</span>`,
     };
   }
@@ -298,7 +331,7 @@
    *     同樣 20 倍本益比，年成長 5% 與 30% 的公司價值天差地遠。
    *     PEG = 本益比 ÷ 盈餘成長率(%)，一般以 1 為合理：
    *
-   *       合理價 = 預估 EPS × 成長率(%) × 目標 PEG
+   *       對應價 = 預估 EPS × 成長率(%) × 你設定的目標 PEG
    */
   function methodPeg(s) {
     const f = QUARTERLY[s.c];
@@ -326,14 +359,15 @@
       cheap: est.eps * g * params.pegLo,
       fair: est.eps * g * params.pegMid,
       rich: est.eps * g * params.pegHi,
+      labels: [`PEG ${fmt(params.pegLo, 2)}`, `PEG ${fmt(params.pegMid, 2)}`, `PEG ${fmt(params.pegHi, 2)}`],
       tag: `成長 ${fmt(g, 0)}%`,
       basis: `<span class="basis-tag">參數</span>目標 PEG ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
              `<span class="basis-src">對比 ${f.y - 1} 年度</span>`,
       formula:
         `成長率 ＝ 預估今年 ${fmt(est.eps)} ÷ ${f.y - 1} 年 ${fmt(prev)} − 1 ＝ ${fmt(gRaw, 1)}%` +
         (capped ? `<br><span class="formula-adj">↳ 超過上限，以 ${fmt(params.gCap, 0)}% 計算</span>` : "") +
-        `<br>合理本益比 ＝ 成長率 ${fmt(g, 1)} × 目標 PEG<br>` +
-        `各價位 ＝ ${fmt(est.eps)} × ${fmt(g, 1)} × ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
+        `<br>對應本益比 ＝ 成長率 ${fmt(g, 1)} × 目標 PEG<br>` +
+        `對應價 ＝ ${fmt(est.eps)} × ${fmt(g, 1)} × ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
         `<br><span class="formula-warn">※ 以單一年度成長率外推，景氣循環股容易高估</span>`,
     };
   }
@@ -365,31 +399,72 @@
     const cur = s.p / sps;
     return {
       cheap: sps * lo, fair: sps * mid, rich: sps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
       tag: `目前 ${fmt(cur)} 倍`,
       basis: `<span class="basis-tag">固定倍數</span>${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
              `<span class="basis-src">每股營收 ${fmt(sps)} 元</span>`,
       formula:
         `每股營收 ＝ 推估年營收 ${fmt(annualRev / 1e6, 1)} 億 × (${f.y}Q${f.q} EPS ${fmt(f.cum)} ÷ 淨利 ${fmt(f.ni / 1e6, 1)} 億)<br>` +
         `　　　　　＝ ${fmt(sps)} 元　目前股價營收比 ${fmt(cur)} 倍<br>` +
-        `各價位 ＝ ${fmt(sps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `對應價 ＝ ${fmt(sps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
         `<br><span class="formula-warn">※ 合理倍數因產業而異極大（軟體可達 5~10 倍、通路常低於 0.5 倍）。` +
         `因為沒有一組通用預設值，本法<b>預設不納入綜合評估</b> —— 請先依同業水準` +
         `調整上方參數，再勾選納入。它的價值在於營收恆為正，虧損公司也估得出來。</span>`,
     };
   }
 
-  /* 4. 本益比法 —— 近四季 EPS × 合理本益比 */
+  /* 3d. 葛拉漢公式（Benjamin Graham, 1962）
+   *
+   *     出自《The Intelligent Investor》修訂版所載的簡化算式：
+   *
+   *       V = EPS × (8.5 + 2g)
+   *
+   *     8.5 是葛拉漢當年觀察到「零成長公司」的基準本益比，g 為預期
+   *     年成長率（%）。本站不替任何個股設定 g —— 它完全由你在參數區
+   *     輸入，卡片同時列出 g ± 敏感度區間，讓你看假設變動的影響。
+   */
+  function methodGraham(s) {
+    const est = estimateAnnualEps(s);
+    const eps = est ? est.eps : s.eps;
+    if (!eps || eps <= 0) {
+      return { na: "缺少可用的每股盈餘（公司虧損），或你尚未在參數區輸入自訂 EPS。" };
+    }
+    const g = params.grahamG, span = params.grahamSpan;
+    const gs = [g - span, g, g + span];
+    // (8.5 + 2g) 在 g < −4.25 時會變成負數，夾住避免出現負價格
+    const mult = gs.map((x) => Math.max(8.5 + 2 * x, 0.5));
+    const src = est ? (est.custom ? "你輸入的 EPS"
+                                  : (est.src === "營收" ? "月營收推估" : "季報年化"))
+                    : "近四季 EPS";
+    return {
+      cheap: eps * mult[0], fair: eps * mult[1], rich: eps * mult[2],
+      labels: gs.map((x) => `g ${fmt(x, 1)}%`),
+      tag: `g ${fmt(g, 1)}%`,
+      basis: `<span class="basis-tag">你的參數</span>成長率 g ${fmt(g, 1)}%（±${fmt(span, 1)}%）` +
+             `<span class="basis-src">EPS ${fmt(eps)} 元 · ${src}</span>`,
+      formula:
+        `葛拉漢公式　V ＝ EPS × (8.5 + 2g)<br>` +
+        `代入 g ＝ ${fmt(gs[0], 1)} / ${fmt(g, 1)} / ${fmt(gs[2], 1)}%　→　` +
+        `倍數 ${fmt(mult[0])} / ${fmt(mult[1])} / ${fmt(mult[2])}<br>` +
+        `V ＝ ${fmt(eps)} × 各倍數` +
+        `<br><span class="formula-warn">※ 8.5 為葛拉漢 1962 年提出的零成長基準本益比，` +
+        `成長率 g 完全由你設定；此式未考慮利率環境，原著另有以公司債殖利率調整的版本</span>`,
+    };
+  }
+
+  /* 4. 本益比法 —— 近四季 EPS × 你選定的本益比倍數 */
   function methodPe(s) {
     if (!s.eps) return { na: "來源未提供本益比（通常代表近四季為虧損），本益比法不適用。" };
     const b = usable(s, "pe");
     const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
     return {
       cheap: s.eps * lo, fair: s.eps * mid, rich: s.eps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`),
       formula:
         `近四季 EPS ＝ 收盤價 ${fmt(s.p)} ÷ 本益比 ${fmt(s.pe)} ＝ ${fmt(s._rawEps || s.eps)} 元` +
         dilutionNote(s) +
-        `<br>各價位 ＝ ${fmt(s.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+        `<br>對應價 ＝ ${fmt(s.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
     };
   }
 
@@ -411,6 +486,7 @@
     { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
     { id: "peg", name: "本益成長比", en: "PEG Ratio", fn: methodPeg },
     { id: "rev", name: "月營收動能法", en: "Revenue Momentum", fn: methodRevenue },
+    { id: "graham", name: "葛拉漢公式", en: "Graham Formula", fn: methodGraham },
     { id: "roe", name: "ROE 法", en: "Return on Equity", fn: methodRoe },
     { id: "pb", name: "股價淨值比法", en: "P/B Ratio", fn: methodPb },
     { id: "ps", name: "股價營收比", en: "P/S Ratio", fn: methodPs },
@@ -459,9 +535,9 @@
           ? `<p class="method-basis">—</p><p class="method-na">⚠︎ ${res.na}</p>`
           : `<p class="method-basis">${res.basis}</p>
              <div class="method-prices">
-               <div class="mp cheap"><span>便宜價</span><strong>${fmt(res.cheap)}</strong></div>
-               <div class="mp fair"><span>合理價</span><strong>${fmt(res.fair)}</strong></div>
-               <div class="mp rich"><span>昂貴價</span><strong>${fmt(res.rich)}</strong></div>
+               <div class="mp lo"><span>${(res.labels || ["低", "中", "高"])[0]}</span><strong>${fmt(res.cheap)}</strong></div>
+               <div class="mp mid"><span>${(res.labels || ["低", "中", "高"])[1]}</span><strong>${fmt(res.fair)}</strong></div>
+               <div class="mp hi"><span>${(res.labels || ["低", "中", "高"])[2]}</span><strong>${fmt(res.rich)}</strong></div>
              </div>
              <p class="method-formula">${res.formula}</p>`}
       `;
@@ -501,7 +577,7 @@
       parts.push(
         `另有 ${a.unknown.map((e) => e.d).join("、")} 的<b>權息</b>（同日配股又配息），
          公開資料無法把配股率與現金股利分離，<b>這部分未修正</b>，
-         實際合理價可能再低一些。`);
+         實際對應價可能再低一些。`);
     }
     if (a.approx) {
       parts.push(`上櫃來源未提供財報基準季，此處以近 150 天內是否除權作近似判斷。`);
@@ -510,68 +586,67 @@
     box.hidden = false;
   }
 
+  /* 計算值彙總
+   *
+   * 這一區只做敘述統計：把各公式在你設定的參數下算出的數值蒐集起來，
+   * report 最小值、中位數、最大值，以及現價落在這些數值中的相對位置。
+   * 不對任何一個數值賦予「便宜／合理／昂貴」之類的評價，也不推論
+   * 該不該買賣 —— 倍數與假設是你自己選的，結論也應該由你自己下。
+   */
   function renderSummary(s, results) {
     const used = METHODS.filter((m) => !results[m.id].na && !offMethods.has(m.id))
                         .map((m) => results[m.id]);
-    const cheap = median(used.map((r) => r.cheap));
-    const fair = median(used.map((r) => r.fair));
-    const rich = median(used.map((r) => r.rich));
+    // 每個方法在三組參數下各產生一個數值，全部攤平後做統計
+    const all = used.flatMap((r) => [r.cheap, r.fair, r.rich])
+                    .filter((v) => isFinite(v) && v > 0)
+                    .sort((a, b) => a - b);
 
-    el.tCheap.textContent = fmt(cheap);
-    el.tFair.textContent = fmt(fair);
-    el.tRich.textContent = fmt(rich);
+    const lo = all.length ? all[0] : null;
+    const hi = all.length ? all[all.length - 1] : null;
+    const md = median(all);
+
+    el.tCheap.textContent = fmt(lo);
+    el.tFair.textContent = fmt(md);
+    el.tRich.textContent = fmt(hi);
     // <i> 內的文字在窄螢幕會被 CSS 隱藏，只留數字避免三個刻度擠在一起
-    el.gScaleL.innerHTML = "<i>便宜</i> <b>" + fmt(cheap) + "</b>";
-    el.gScaleM.innerHTML = "<i>合理</i> <b>" + fmt(fair) + "</b>";
-    el.gScaleR.innerHTML = "<i>昂貴</i> <b>" + fmt(rich) + "</b>";
+    el.gScaleL.innerHTML = "<i>最小</i> <b>" + fmt(lo) + "</b>";
+    el.gScaleM.innerHTML = "<i>中位數</i> <b>" + fmt(md) + "</b>";
+    el.gScaleR.innerHTML = "<i>最大</i> <b>" + fmt(hi) + "</b>";
     el.gaugePrice.textContent = fmt(s.p);
 
-    if (cheap === null || !(cheap < rich)) {
+    if (!all.length || !(lo < hi)) {
       el.gaugeMark.style.left = "50%";
       el.verdict.className = "verdict";
       el.verdict.textContent = used.length
-        ? "各方法估值差異過大或參數異常，無法整合出位階，請參考個別方法。"
-        : "目前沒有任何可用的估價法（可能是虧損且不配息），或所有方法都被取消勾選。";
+        ? "目前納入的公式只產生單一數值，無法做分佈統計，請直接看下方各公式的計算結果。"
+        : "目前沒有任何公式可計算（多數公式需要獲利或股利為正），或所有公式都被取消勾選。";
       return;
     }
 
-    // 位階尺標：便宜段 0–25%、合理段 25–75%（合理價落在 50%）、昂貴段 75–100%
-    const map = (v, a, b, c, d) => c + ((v - a) / (b - a)) * (d - c);
-    let pos;
-    if (s.p <= cheap)      pos = clamp(map(s.p, cheap * 0.6, cheap, 2, 25), 2, 25);
-    else if (s.p <= fair)  pos = map(s.p, cheap, fair, 25, 50);
-    else if (s.p <= rich)  pos = map(s.p, fair, rich, 50, 75);
-    else                   pos = clamp(map(s.p, rich, rich * 1.6, 75, 98), 75, 98);
+    // 現價在最小～最大之間的線性位置，純粹是刻度定位，不含評價
+    const pos = clamp(((s.p - lo) / (hi - lo)) * 100, 2, 98);
     el.gaugeMark.style.left = pos.toFixed(1) + "%";
 
-    const gap = (s.p / fair - 1) * 100;
-    const vs = gap >= 0 ? `高於合理價 ${fmt(Math.abs(gap), 1)}%`
-                        : `低於合理價 ${fmt(Math.abs(gap), 1)}%`;
-    let cls, txt;
-    if (s.p < cheap) {
-      cls = "is-cheap";
-      txt = `現價 <b>${fmt(s.p)}</b> 元<b>低於便宜價 ${fmt(cheap)}</b> 元，${vs}，在各法整合的區間中屬於<b>便宜</b>位階。`;
-    } else if (s.p < fair) {
-      cls = "is-cheap";
-      txt = `現價 <b>${fmt(s.p)}</b> 元位於便宜價與合理價之間，${vs}，屬<b>合理偏低</b>位階。`;
-    } else if (s.p < rich) {
-      cls = "is-fair";
-      txt = `現價 <b>${fmt(s.p)}</b> 元位於合理價與昂貴價之間，${vs}，屬<b>合理偏高</b>位階。`;
-    } else {
-      cls = "is-rich";
-      txt = `現價 <b>${fmt(s.p)}</b> 元<b>高於昂貴價 ${fmt(rich)}</b> 元，${vs}，屬<b>昂貴</b>位階。`;
-    }
-    // 可用方法太少時，「中位數」其實只反映單一模型，要講清楚
-    const thin = used.length <= 2
-      ? `<br><span class="verdict-thin">⚠︎ 目前只有 ${used.length} 種方法可用（多數方法需要獲利為正），
-         這個區間等於單一模型的結果，參考性有限。
-         ${results.ps && !results.ps.na && offMethods.has("ps")
-            ? "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 調整參數符合同業水準後勾選，可多一個對照。"
-            : ""}</span>`
-      : "";
-    el.verdict.className = "verdict " + cls;
-    el.verdict.innerHTML = txt + `<br><span style="opacity:.8;font-size:12.5px">
-      綜合 ${used.length} 種估價法的中位數計算；不同方法適用的公司類型不同，數字僅供比較參考。</span>` + thin;
+    const below = all.filter((v) => v < s.p).length;
+    const pctBelow = (below / all.length) * 100;
+    const vsMd = (s.p / md - 1) * 100;
+
+    el.verdict.className = "verdict";
+    el.verdict.innerHTML =
+      `現價 <b>${fmt(s.p)}</b> 元。目前納入 <b>${used.length}</b> 種公式、
+       共 <b>${all.length}</b> 個計算值，範圍 <b>${fmt(lo)}</b> ～ <b>${fmt(hi)}</b> 元，
+       中位數 <b>${fmt(md)}</b> 元。<br>
+       現價高於其中 <b>${fmt(pctBelow, 0)}%</b> 的計算值，
+       與中位數相差 <b>${vsMd >= 0 ? "+" : "−"}${fmt(Math.abs(vsMd), 1)}%</b>。
+       <span class="verdict-note">以上為敘述統計，計算值取決於你在「計算參數」中設定的倍數與假設，
+       本站不對這些數值作任何評價，也不構成買賣建議。</span>` +
+      (used.length <= 2
+        ? `<span class="verdict-thin">⚠︎ 目前只有 ${used.length} 種公式可計算（多數需要獲利為正），
+           統計量等同單一模型的輸出，離散程度沒有參考意義。
+           ${results.ps && !results.ps.na && offMethods.has("ps")
+              ? "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 依同業設定倍數後可勾選納入。"
+              : ""}</span>`
+        : "");
   }
 
   // ═══════════════════════════════════════════════════════
@@ -838,16 +913,21 @@
                  pYHi: "yHi", pYMid: "yMid", pYLo: "yLo",
                  pR: "r", pG: "g", pMos: "mos",
                  pPsLo: "psLo", pPsMid: "psMid", pPsHi: "psHi",
-                 pPegLo: "pegLo", pPegMid: "pegMid", pPegHi: "pegHi", pGCap: "gCap" };
+                 pPegLo: "pegLo", pPegMid: "pegMid", pPegHi: "pegHi", pGCap: "gCap",
+                 pGrahamG: "grahamG", pGrahamSpan: "grahamSpan", pCustomEps: "customEps" };
 
   function readParams() {
     for (const [id, key] of Object.entries(PIDS)) {
       const node = $(id);
       if (!node) continue;
-      if (node.type === "checkbox") params[key] = node.checked;
-      else {
+      if (node.type === "checkbox") {
+        params[key] = node.checked;
+      } else if (node.value.trim() === "") {
+        // 自訂 EPS 是選填的，清空代表「改回自動計算」；其他欄位留空則忽略
+        if (key === "customEps") params[key] = 0;
+      } else {
         const v = parseFloat(node.value);
-        if (isFinite(v) && v > 0) params[key] = v;
+        if (isFinite(v) && (v > 0 || key === "grahamG")) params[key] = v;
       }
     }
     localStorage.setItem("fv_params", JSON.stringify(params));
@@ -858,6 +938,7 @@
       const node = $(id);
       if (!node) continue;
       if (node.type === "checkbox") node.checked = params[key];
+      else if (key === "customEps") node.value = params[key] > 0 ? params[key] : "";
       else node.value = params[key];
     }
   }

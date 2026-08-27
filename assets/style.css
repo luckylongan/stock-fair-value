@@ -9,12 +9,19 @@
   --text-dim:  #8a94a8;
   --accent:    #2563eb;
   --accent-sf: #eff4ff;
-  --cheap:     #0f9d58;   /* 便宜（綠） */
+  --cheap:     #0f9d58;   /* 保留給狀態訊息（成功） */
   --cheap-sf:  #e8f6ee;
-  --fair:      #d4a017;   /* 合理（黃） */
+  --fair:      #d4a017;   /* 保留給狀態訊息（提醒） */
   --fair-sf:   #fdf6e3;
-  --rich:      #d93025;   /* 昂貴（紅，台股習慣） */
+  --rich:      #d93025;   /* 保留給狀態訊息（錯誤） */
   --rich-sf:   #fdecea;
+  /* 數值階層：僅表示大小順序，不帶好壞評價 */
+  --num-lo:    #5b7cb8;
+  --num-mid:   #3c5a94;
+  --num-hi:    #24406e;
+  --num-lo-sf: #eef2f9;
+  --num-mid-sf:#e6ecf6;
+  --num-hi-sf: #dde5f2;
   --shadow:    0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.06);
   --radius:    14px;
 }
@@ -34,6 +41,12 @@
   --fair-sf:   #322710;
   --rich:      #ff6b6b;
   --rich-sf:   #351a1a;
+  --num-lo:    #8fb3e6;
+  --num-mid:   #a9c6f0;
+  --num-hi:    #c6dbfa;
+  --num-lo-sf: #182236;
+  --num-mid-sf:#1c2941;
+  --num-hi-sf: #21304c;
   --shadow:    0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
 }
 
@@ -211,9 +224,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
 .sum-cell { padding: 14px; border-radius: 11px; text-align: center; border: 1px solid transparent; }
 .sum-cell .sum-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
 .sum-cell strong { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
-.sum-cell.cheap { background: var(--cheap-sf); border-color: color-mix(in srgb, var(--cheap) 30%, transparent); color: var(--cheap); }
-.sum-cell.fair  { background: var(--fair-sf);  border-color: color-mix(in srgb, var(--fair) 30%, transparent);  color: var(--fair); }
-.sum-cell.rich  { background: var(--rich-sf);  border-color: color-mix(in srgb, var(--rich) 30%, transparent);  color: var(--rich); }
+.sum-cell.lo  { background: var(--num-lo-sf);  border-color: color-mix(in srgb, var(--num-lo) 30%, transparent);  color: var(--num-lo); }
+.sum-cell.mid { background: var(--num-mid-sf); border-color: color-mix(in srgb, var(--num-mid) 35%, transparent); color: var(--num-mid); }
+.sum-cell.hi  { background: var(--num-hi-sf);  border-color: color-mix(in srgb, var(--num-hi) 30%, transparent);  color: var(--num-hi); }
 
 /* 位階尺標 */
 .gauge { margin: 26px 0 12px; }
@@ -222,9 +235,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
 .seg-cheap { flex: 0 0 25%; }
 .seg-fair  { flex: 1 1 auto; }
 .seg-rich  { flex: 0 0 25%; }
-.seg-cheap { background: linear-gradient(90deg, var(--cheap), color-mix(in srgb, var(--cheap) 55%, var(--fair))); border-radius: 999px 0 0 999px; }
-.seg-fair  { background: linear-gradient(90deg, color-mix(in srgb, var(--cheap) 55%, var(--fair)), var(--fair)); }
-.seg-rich  { background: linear-gradient(90deg, var(--fair), var(--rich)); border-radius: 0 999px 999px 0; }
+.seg-cheap { background: linear-gradient(90deg, var(--num-lo), color-mix(in srgb, var(--num-lo) 50%, var(--num-mid))); border-radius: 999px 0 0 999px; }
+.seg-fair  { background: linear-gradient(90deg, color-mix(in srgb, var(--num-lo) 50%, var(--num-mid)), var(--num-mid)); }
+.seg-rich  { background: linear-gradient(90deg, var(--num-mid), var(--num-hi)); border-radius: 0 999px 999px 0; }
 .gauge-mark {
   position: absolute; top: -5px; width: 4px; height: 22px; border-radius: 3px;
   background: var(--text); transform: translateX(-50%);
@@ -250,9 +263,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
 }
 .gauge-scale b { font-weight: 650; }
 .gauge-scale i { font-style: normal; }
-#gScaleL b { color: var(--cheap); }
-#gScaleM b { color: var(--fair); }
-#gScaleR b { color: var(--rich); }
+#gScaleL b { color: var(--num-lo); }
+#gScaleM b { color: var(--num-mid); }
+#gScaleR b { color: var(--num-hi); }
 .gauge-scale span::before {
   content: ""; position: absolute; top: -13px; left: 50%;
   width: 1px; height: 6px; background: var(--border);
@@ -266,9 +279,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
   display: block; margin-top: 9px; padding-top: 9px;
   border-top: 1px dashed currentColor; font-size: 12.5px; opacity: .95;
 }
-.verdict.is-cheap { background: var(--cheap-sf); color: var(--cheap); }
-.verdict.is-fair  { background: var(--fair-sf);  color: var(--fair); }
-.verdict.is-rich  { background: var(--rich-sf);  color: var(--rich); }
+.verdict-note {
+  display: block; margin-top: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.65;
+}
 
 /* ── 四大估價法 ──────────────────────────────────────────── */
 .methods { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-bottom: 18px; }
@@ -299,9 +312,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
 .mp { text-align: center; padding: 10px 6px; border-radius: 9px; background: var(--surface-2); }
 .mp span { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
 .mp strong { font-size: 19px; font-weight: 700; }
-.mp.cheap strong { color: var(--cheap); }
-.mp.fair  strong { color: var(--fair); }
-.mp.rich  strong { color: var(--rich); }
+.mp.lo  strong { color: var(--num-lo); }
+.mp.mid strong { color: var(--num-mid); }
+.mp.hi  strong { color: var(--num-hi); }
 .method-formula {
   margin: auto 0 0; padding-top: 12px; border-top: 1px dashed var(--border);
   font-size: 11.5px; color: var(--text-dim); line-height: 1.65; font-variant-numeric: tabular-nums;
