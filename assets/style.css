@@ -399,3 +399,78 @@ details.card summary h3 { font-size: 15.5px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   投資判讀版（pro.html）的覆蓋規則
+
+   計算工具版刻意用中性藍階，只表示數值大小；投資判讀版改回台股
+   習慣的綠（便宜）／黃（合理）／紅（昂貴），並加上位階配色。
+   兩版共用同一份 style.css 與 app.js，只有這一段不同。
+   ═══════════════════════════════════════════════════════════ */
+body[data-mode="pro"] .sum-cell.lo  { background: var(--cheap-sf); border-color: color-mix(in srgb, var(--cheap) 30%, transparent); color: var(--cheap); }
+body[data-mode="pro"] .sum-cell.mid { background: var(--fair-sf);  border-color: color-mix(in srgb, var(--fair) 30%, transparent);  color: var(--fair); }
+body[data-mode="pro"] .sum-cell.hi  { background: var(--rich-sf);  border-color: color-mix(in srgb, var(--rich) 30%, transparent);  color: var(--rich); }
+
+body[data-mode="pro"] .mp.lo  strong { color: var(--cheap); }
+body[data-mode="pro"] .mp.mid strong { color: var(--fair); }
+body[data-mode="pro"] .mp.hi  strong { color: var(--rich); }
+
+body[data-mode="pro"] .seg-cheap { background: linear-gradient(90deg, var(--cheap), color-mix(in srgb, var(--cheap) 55%, var(--fair))); }
+body[data-mode="pro"] .seg-fair  { background: linear-gradient(90deg, color-mix(in srgb, var(--cheap) 55%, var(--fair)), var(--fair)); }
+body[data-mode="pro"] .seg-rich  { background: linear-gradient(90deg, var(--fair), var(--rich)); }
+
+body[data-mode="pro"] #gScaleL b { color: var(--cheap); }
+body[data-mode="pro"] #gScaleM b { color: var(--fair); }
+body[data-mode="pro"] #gScaleR b { color: var(--rich); }
+
+/* 位階配色 */
+body[data-mode="pro"] .verdict.is-cheap  { background: var(--cheap-sf); color: var(--cheap); }
+body[data-mode="pro"] .verdict.is-nearby { background: var(--cheap-sf); color: var(--cheap); opacity: .92; }
+body[data-mode="pro"] .verdict.is-fair   { background: var(--fair-sf);  color: var(--fair); }
+body[data-mode="pro"] .verdict.is-rich   { background: var(--rich-sf);  color: var(--rich); }
+body[data-mode="pro"] .verdict-note { color: inherit; opacity: .78; }
+
+/* 版本切換列 */
+.editions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 18px; padding: 11px 15px; border-radius: 11px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 12.5px; color: var(--text-dim);
+}
+.editions-label { font-weight: 600; color: var(--text-mid); }
+.editions a {
+  padding: 4px 12px; border-radius: 999px; text-decoration: none;
+  border: 1px solid var(--border); color: var(--text-mid); transition: all .15s;
+}
+.editions a:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-sf); }
+.editions a.current {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+}
+.editions .editions-hint { flex: 1 1 100%; margin-top: 2px; line-height: 1.6; }
+
+/* 進場規則卡（僅投資判讀版） */
+.rules h3 { font-size: 15.5px; }
+.rules-sub { margin: 4px 0 14px; font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
+.rules-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rules-table td {
+  padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+.rules-table tr:last-child td { border-bottom: 0; }
+.rules-table td:first-child { color: var(--text-mid); white-space: nowrap; width: 45%; }
+.rules-table b { font-weight: 700; }
+.dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: 8px; vertical-align: 0;
+}
+.dot-cheap  { background: var(--cheap); }
+.dot-nearby { background: color-mix(in srgb, var(--cheap) 55%, var(--fair)); }
+.dot-fair   { background: var(--fair); }
+.dot-rich   { background: var(--rich); }
+.rules-note {
+  margin: 14px 0 0; padding: 11px 13px; border-radius: 9px;
+  background: var(--surface-2); font-size: 12px; color: var(--text-mid); line-height: 1.7;
+}
+@media (max-width: 640px) {
+  .rules-table td:first-child { width: auto; white-space: normal; }
+  .rules-table td { padding: 8px 6px; font-size: 12.5px; }
+}

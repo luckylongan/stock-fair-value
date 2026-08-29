@@ -9,6 +9,13 @@
 (() => {
   "use strict";
 
+  // 兩個版本共用這份程式碼，只有呈現層不同，公式與資料完全一致：
+  //   calc（index.html）= 財務計算工具箱，中性用語、不作評價
+  //   pro （pro.html）  = 投資判讀版，紅綠配色、位階與進場條件判定
+  // 這樣公式只維護一處，不會兩版改到不一致。
+  const MODE = document.body.dataset.mode === "pro" ? "pro" : "calc";
+  const isPro = MODE === "pro";
+
   // ── 狀態 ────────────────────────────────────────────────
   let STOCKS = [];        // 全市場個股
   let BANDS = {};         // 代號 -> {pe:[P20,P50,P80], pb:[...], y:[...]}
@@ -481,6 +488,13 @@
   }
 
   // 依估價基礎分組：本益比家族 → 淨值類 → 營收類 → 股利類
+  const PRO_COLS = ["便宜價", "合理價", "昂貴價"];
+  /** 投資判讀版顯示價位名稱，計算工具版顯示參數本身（如「15.94 倍」）。 */
+  function colLabel(res, i) {
+    if (isPro) return PRO_COLS[i];
+    return (res.labels || ["低", "中", "高"])[i];
+  }
+
   const METHODS = [
     { id: "pefwd", name: "本益比法", tag: "年化 EPS", en: "Forward P/E", fn: methodPeFwd },
     { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
@@ -535,9 +549,9 @@
           ? `<p class="method-basis">—</p><p class="method-na">⚠︎ ${res.na}</p>`
           : `<p class="method-basis">${res.basis}</p>
              <div class="method-prices">
-               <div class="mp lo"><span>${(res.labels || ["低", "中", "高"])[0]}</span><strong>${fmt(res.cheap)}</strong></div>
-               <div class="mp mid"><span>${(res.labels || ["低", "中", "高"])[1]}</span><strong>${fmt(res.fair)}</strong></div>
-               <div class="mp hi"><span>${(res.labels || ["低", "中", "高"])[2]}</span><strong>${fmt(res.rich)}</strong></div>
+               <div class="mp lo"><span>${colLabel(res, 0)}</span><strong>${fmt(res.cheap)}</strong></div>
+               <div class="mp mid"><span>${colLabel(res, 1)}</span><strong>${fmt(res.fair)}</strong></div>
+               <div class="mp hi"><span>${colLabel(res, 2)}</span><strong>${fmt(res.rich)}</strong></div>
              </div>
              <p class="method-formula">${res.formula}</p>`}
       `;
@@ -586,6 +600,91 @@
     box.hidden = false;
   }
 
+
+  /* 投資判讀版的彙總
+   *
+   * 三個價位分別取各公式「便宜／合理／昂貴」三欄的中位數（中位數比平均數
+   * 不容易被單一極端值拉走）。進場判定是一條寫死的規則，不是預測：
+   *
+   *   現價 <  便宜價            → 進場區
+   *   便宜價 ≤ 現價 < 合理價     → 接近進場
+   *   合理價 ≤ 現價 < 昂貴價     → 偏高
+   *   現價 ≥  昂貴價            → 過熱
+   *
+   * 規則與門檻都直接顯示在畫面上，使用者可以自行改參數改變門檻。
+   */
+  function renderSummaryPro(s, results, used) {
+    const cheap = median(used.map((r) => r.cheap));
+    const fair = median(used.map((r) => r.fair));
+    const rich = median(used.map((r) => r.rich));
+
+    el.tCheap.textContent = fmt(cheap);
+    el.tFair.textContent = fmt(fair);
+    el.tRich.textContent = fmt(rich);
+    el.gScaleL.innerHTML = "<i>便宜</i> <b>" + fmt(cheap) + "</b>";
+    el.gScaleM.innerHTML = "<i>合理</i> <b>" + fmt(fair) + "</b>";
+    el.gScaleR.innerHTML = "<i>昂貴</i> <b>" + fmt(rich) + "</b>";
+    el.gaugePrice.textContent = fmt(s.p);
+
+    if (cheap === null || !(cheap < rich)) {
+      el.gaugeMark.style.left = "50%";
+      el.verdict.className = "verdict";
+      el.verdict.textContent = used.length
+        ? "各公式結果差異過大或參數異常，無法整合出位階，請看下方個別公式。"
+        : "目前沒有任何公式可計算（多半是虧損且不配息），或所有公式都被取消勾選。";
+      return;
+    }
+
+    // 位階尺標：便宜段 0–25%、合理段 25–75%（合理價落在 50%）、昂貴段 75–100%
+    const map = (v, a, b, c, d) => c + ((v - a) / (b - a)) * (d - c);
+    let pos;
+    if (s.p <= cheap)      pos = clamp(map(s.p, cheap * 0.6, cheap, 2, 25), 2, 25);
+    else if (s.p <= fair)  pos = map(s.p, cheap, fair, 25, 50);
+    else if (s.p <= rich)  pos = map(s.p, fair, rich, 50, 75);
+    else                   pos = clamp(map(s.p, rich, rich * 1.6, 75, 98), 75, 98);
+    el.gaugeMark.style.left = pos.toFixed(1) + "%";
+
+    const gapToCheap = (s.p / cheap - 1) * 100;   // 距離便宜價還有多少 %
+    const vsFair = (s.p / fair - 1) * 100;
+    const diff = Math.abs(s.p - cheap);
+
+    let cls, head, action;
+    if (s.p < cheap) {
+      cls = "is-cheap";
+      head = `現價 <b>${fmt(s.p)}</b> 元已<b>低於便宜價 ${fmt(cheap)}</b> 元 ` +
+             `(低 ${fmt(Math.abs(gapToCheap), 1)}%)`;
+      action = `<b>符合進場條件</b>　依上述規則，現價落在「進場區」。`;
+    } else if (s.p < fair) {
+      cls = "is-nearby";
+      head = `現價 <b>${fmt(s.p)}</b> 元位於便宜價與合理價之間，${vsFair >= 0 ? "高" : "低"}於合理價 ${fmt(Math.abs(vsFair), 1)}%`;
+      action = `<b>接近進場</b>　距便宜價 ${fmt(cheap)} 元還差 ` +
+               `<b>${fmt(diff)} 元（${fmt(Math.abs(gapToCheap), 1)}%）</b>。`;
+    } else if (s.p < rich) {
+      cls = "is-fair";
+      head = `現價 <b>${fmt(s.p)}</b> 元位於合理價與昂貴價之間，高於合理價 ${fmt(Math.abs(vsFair), 1)}%`;
+      action = `<b>偏高</b>　距便宜價 ${fmt(cheap)} 元還差 ` +
+               `<b>${fmt(diff)} 元（${fmt(Math.abs(gapToCheap), 1)}%）</b>。`;
+    } else {
+      cls = "is-rich";
+      head = `現價 <b>${fmt(s.p)}</b> 元已<b>高於昂貴價 ${fmt(rich)}</b> 元，高於合理價 ${fmt(Math.abs(vsFair), 1)}%`;
+      action = `<b>過熱</b>　距便宜價 ${fmt(cheap)} 元還差 ` +
+               `<b>${fmt(diff)} 元（${fmt(Math.abs(gapToCheap), 1)}%）</b>。`;
+    }
+
+    const thin = used.length <= 2
+      ? `<span class="verdict-thin">⚠︎ 目前只有 ${used.length} 種公式可計算，
+         三個價位等同單一模型的輸出，位階判定沒有參考意義。</span>`
+      : "";
+
+    el.verdict.className = "verdict " + cls;
+    el.verdict.innerHTML =
+      `${head}。<br>${action}` +
+      `<span class="verdict-note">位階由 ${used.length} 種公式各欄的中位數比對而得，
+       門檻即上方三個價位，改「計算參數」就會改變。這是機械式的規則判定，
+       不預測股價、不考慮產業前景與個人財務狀況，<b>不構成投資建議</b>。</span>` +
+      thin;
+  }
+
   /* 計算值彙總
    *
    * 這一區只做敘述統計：把各公式在你設定的參數下算出的數值蒐集起來，
@@ -596,6 +695,7 @@
   function renderSummary(s, results) {
     const used = METHODS.filter((m) => !results[m.id].na && !offMethods.has(m.id))
                         .map((m) => results[m.id]);
+    if (isPro) return renderSummaryPro(s, results, used);
     // 每個方法在三組參數下各產生一個數值，全部攤平後做統計
     const all = used.flatMap((r) => [r.cheap, r.fair, r.rich])
                     .filter((v) => isFinite(v) && v > 0)

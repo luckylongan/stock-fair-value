@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幾塊你要買？ ｜ 台股財務計算工具箱</title>
-<meta name="description" content="台股財務計算工具箱：以本益比、股價淨值比、殖利率、葛拉漢公式等九種公開財務公式，依你自訂的假設參數計算對應股價。資料取自證交所與櫃買中心公開資訊，不提供投資建議。">
+<title>幾塊你要買？ ｜ 投資判讀版</title>
+<meta name="description" content="台股估價的投資判讀版：九種公式整合出便宜價／合理價／昂貴價，以紅綠位階顯示現價落點與進場條件。計算結果僅為機械式規則判定，不構成投資建議。">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 </head>
-<body>
+<body data-mode="pro">
 
 <header class="topbar">
   <div class="wrap topbar-inner">
@@ -16,7 +16,7 @@
       <span class="brand-mark">📈</span>
       <div>
         <h1>幾塊你要買？</h1>
-        <p class="brand-sub">財務計算工具箱 · 九種公式 · 假設參數由你設定</p>
+        <p class="brand-sub">投資判讀版 · 九種公式整合 · 便宜／合理／昂貴位階</p>
       </div>
     </div>
     <div class="topbar-actions">
@@ -36,10 +36,11 @@
 
   <nav class="editions">
     <span class="editions-label">版本</span>
-    <a href="index.html" class="current">計算工具版</a>
-    <a href="pro.html">投資判讀版</a>
-    <span class="editions-hint">目前是<strong>計算工具版</strong>：只做運算、顯示參數與對應結果，不對數值作評價。
-      另一版會把結果整合成三個價位並依固定規則標示位階，兩版的公式與資料完全相同。</span>
+    <a href="index.html">計算工具版</a>
+    <a href="pro.html" class="current">投資判讀版</a>
+    <span class="editions-hint">目前是<strong>投資判讀版</strong>：把九種公式整合成便宜／合理／昂貴三個價位，
+      並依固定規則判定現價位階與進場條件。判定規則寫死在畫面上、門檻隨你的參數變動，
+      <strong>不預測股價，也不構成投資建議</strong>。</span>
   </nav>
 
   <!-- 搜尋 -->
@@ -96,14 +97,14 @@
     <!-- 綜合結論 -->
     <div class="card summary">
       <div class="summary-head">
-        <h3>計算值彙總</h3>
-        <p class="summary-sub">下方各公式在你設定的參數下算出的數值，做<strong>敘述統計</strong>。
-          本站不對這些數值作評價，也不提供買賣建議。勾選卡片可調整納入哪些公式。</p>
+        <h3>綜合位階</h3>
+        <p class="summary-sub">取下方各公式三欄的<strong>中位數</strong>，整合成三個價位，
+          再看現價落在哪一段。勾選卡片可調整納入哪些公式。</p>
       </div>
       <div class="summary-grid">
-        <div class="sum-cell lo"><span class="sum-label">最小計算值</span><strong id="tCheap">—</strong></div>
-        <div class="sum-cell mid"><span class="sum-label">中位數</span><strong id="tFair">—</strong></div>
-        <div class="sum-cell hi"><span class="sum-label">最大計算值</span><strong id="tRich">—</strong></div>
+        <div class="sum-cell lo"><span class="sum-label">便宜價</span><strong id="tCheap">—</strong></div>
+        <div class="sum-cell mid"><span class="sum-label">合理價</span><strong id="tFair">—</strong></div>
+        <div class="sum-cell hi"><span class="sum-label">昂貴價</span><strong id="tRich">—</strong></div>
       </div>
       <div class="gauge">
         <div class="gauge-track">
@@ -121,6 +122,23 @@
         </div>
       </div>
       <p id="verdict" class="verdict">—</p>
+    </div>
+
+
+    <!-- 進場規則 -->
+    <div class="card rules">
+      <h3>進場條件怎麼判定？</h3>
+      <p class="rules-sub">這是一條寫死的比較規則，不是預測。門檻就是上方三個價位，
+        改「計算參數」就會跟著變。</p>
+      <table class="rules-table">
+        <tr><td><span class="dot dot-cheap"></span>現價 &lt; 便宜價</td><td><b>進場區</b>　符合進場條件</td></tr>
+        <tr><td><span class="dot dot-nearby"></span>便宜價 ≤ 現價 &lt; 合理價</td><td><b>接近進場</b>　顯示距便宜價還差多少</td></tr>
+        <tr><td><span class="dot dot-fair"></span>合理價 ≤ 現價 &lt; 昂貴價</td><td><b>偏高</b></td></tr>
+        <tr><td><span class="dot dot-rich"></span>現價 ≥ 昂貴價</td><td><b>過熱</b></td></tr>
+      </table>
+      <p class="rules-note">位階只反映「現價與公式輸出的相對關係」，不含產業前景、
+        一次性損益、公司治理、總體環境與你的個人財務狀況。符合進場條件不等於值得買，
+        不符合也不等於該賣。</p>
     </div>
 
     <!-- 計算公式 -->
@@ -364,12 +382,14 @@ ROE  = EPS ÷ 每股淨值 = 股價淨值比 ÷ 本益比
 
 <footer class="foot wrap">
   <p class="disclaimer">
-    <strong>免責聲明：</strong>本站是<strong>財務計算工具</strong>，功能為對公開財務數字執行
-    使用者指定的四則運算並顯示結果。所有倍數、成長率、目標殖利率等假設<strong>均由使用者自行設定</strong>，
-    本站不對任何個股設定價位、不對計算結果作出評價、不推介標的、不提供買賣時點，
-    <strong>不構成投資建議、分析意見或買賣要約</strong>。
-    公式為公開的財務教科書內容，其假設與限制無法反映產業前景、一次性損益、公司治理等因素，
-    計算結果與實際價值可能有重大差異。使用者應自行查證原始資料並自負決策責任。
+    <strong>免責聲明：</strong>本頁的「便宜／合理／昂貴」與位階判定，是把公開財務數字
+    代入公開財務公式後，依<strong>畫面上寫明的固定規則</strong>做機械式比較的結果，
+    <strong>不是對個股價值的判斷，也不是投資建議、分析意見或買賣要約</strong>。
+    所有倍數與假設均由使用者自行設定，改變參數就會改變結論。
+    本站未取得證券投資顧問事業許可，不從事推介或代客操作。
+    公式為公開的財務教科書內容，其假設與限制無法反映產業前景、一次性損益、公司治理、
+    總體環境等因素，計算結果與實際價值可能有重大差異。任何買賣決策應自行評估風險承受度
+    並諮詢合格專業人士。使用者應自行查證原始資料並自負決策責任。
   </p>
   <p class="foot-src">
     資料來源：臺灣證券交易所、證券櫃檯買賣中心、公開資訊觀測站之公開資料。
