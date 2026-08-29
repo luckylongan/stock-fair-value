@@ -401,9 +401,9 @@ details.card summary h3 { font-size: 15.5px; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   投資判讀版（pro.html）的覆蓋規則
+   專業版（pro.html）的覆蓋規則
 
-   計算工具版刻意用中性藍階，只表示數值大小；投資判讀版改回台股
+   計算版刻意用中性藍階，只表示數值大小；專業版改回台股
    習慣的綠（便宜）／黃（合理）／紅（昂貴），並加上位階配色。
    兩版共用同一份 style.css 與 app.js，只有這一段不同。
    ═══════════════════════════════════════════════════════════ */
@@ -448,7 +448,7 @@ body[data-mode="pro"] .verdict-note { color: inherit; opacity: .78; }
 }
 .editions .editions-hint { flex: 1 1 100%; margin-top: 2px; line-height: 1.6; }
 
-/* 進場規則卡（僅投資判讀版） */
+/* 進場規則卡（僅專業版） */
 .rules h3 { font-size: 15.5px; }
 .rules-sub { margin: 4px 0 14px; font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
 .rules-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -536,3 +536,7 @@ body[data-mode="pro"] .verdict-note { color: inherit; opacity: .78; }
   .etf-prem-main strong { font-size: 32px; }
   .bl-kind { display: none; }
 }
+
+.etf-caveats { margin: 8px 0 10px; padding-left: 20px; font-size: 13.5px; color: var(--text-mid); }
+.etf-caveats li { margin-bottom: 8px; line-height: 1.7; }
+.etf-caveats strong { color: var(--text); }
