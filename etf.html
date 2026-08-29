@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幾塊你要買？ ｜ ETF 折溢價</title>
+<meta name="description" content="台股 ETF 的折溢價率查詢：市價與預估淨值的差距、全市場溢價與折價排行。ETF 沒有財報，個股的本益比與 ROE 等公式並不適用。">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body data-mode="etf">
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">📈</span>
+      <div>
+        <h1>幾塊你要買？</h1>
+        <p class="brand-sub">ETF 折溢價 · 市價與淨值的差距</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="datainfo">
+        <span id="dataDate" class="datainfo-date">載入中…</span>
+        <span id="dataCount" class="datainfo-count"></span>
+      </div>
+      <button id="themeBtn" class="btn btn-icon" title="切換深淺色">◐</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <nav class="editions">
+    <span class="editions-label">版本</span>
+    <a href="index.html">計算工具版</a>
+    <a href="pro.html">投資判讀版</a>
+    <a href="etf.html" class="current">ETF</a>
+    <span class="editions-hint">另外兩版是<strong>個股</strong>的估價公式。ETF 是一籃子證券、沒有財報，
+      那九種公式有七種完全不適用，所以獨立成這一頁，看的是 ETF 真正該看的指標。</span>
+  </nav>
+
+  <!-- 為什麼 ETF 不用那些公式 -->
+  <details class="card explain etf-why">
+    <summary><h3>為什麼 ETF 不能套用個股的估價公式？</h3></summary>
+    <div class="explain-body">
+      <p>ETF 是一籃子證券，<strong>沒有財報</strong> —— 沒有每股盈餘、營收、淨利、
+         股東權益報酬率，也沒有盈餘成長率。所以個股那九種公式：</p>
+      <table class="rules-table etf-fit">
+        <tr><td>本益比法（年化 EPS）</td><td class="no">✗ 沒有季報</td></tr>
+        <tr><td>本益比法（近四季）</td><td class="no">✗ 交易所的本益比資料只涵蓋個股</td></tr>
+        <tr><td>本益成長比 PEG</td><td class="no">✗ 沒有盈餘成長率</td></tr>
+        <tr><td>月營收動能法</td><td class="no">✗ 沒有營收</td></tr>
+        <tr><td>葛拉漢公式</td><td class="no">✗ 需要 EPS</td></tr>
+        <tr><td>ROE 法</td><td class="no">✗ 沒有股東權益報酬率</td></tr>
+        <tr><td>股價營收比 P/S</td><td class="no">✗ 沒有營收</td></tr>
+        <tr><td>股價淨值比 P/B</td><td class="partial">△ 算得出來，但意義完全不同</td></tr>
+        <tr><td>股利法</td><td class="yes">✓ 配息型 ETF 適用</td></tr>
+      </table>
+      <p><strong>股價淨值比那個「△」是重點。</strong>個股的股價淨值比是估值指標，
+         1.2 倍和 5 倍代表不同的貴賤；但 ETF 的淨值就是它持有的那籃子證券的市值總和，
+         所以理論上<strong>市價應該恆等於淨值</strong>。偏離不叫「便宜」或「貴」，
+         那叫<strong>折溢價</strong> —— 是造市、流動性與申購贖回機制的問題，
+         用估值的邏輯去解讀會完全會錯意。</p>
+      <h4>折溢價率</h4>
+      <pre>折溢價率 = (市價 − 淨值) ÷ 淨值 × 100%</pre>
+      <p><strong>溢價</strong>（正值）代表你付的價格高於它實際持有的資產價值，
+         等於多付錢；<strong>折價</strong>（負值）則相反。正常情況下會貼近 0，
+         由造市商透過申購贖回機制拉回。持續偏離通常出現在流動性差、
+         連結海外市場（有時差）、或市場情緒過熱的時候。</p>
+      <h4>ETF 還該看什麼</h4>
+      <p>本頁沒有涵蓋、但同樣重要的：<strong>內扣費用</strong>（經理費＋保管費，
+         長期報酬的最大變數）、<strong>追蹤誤差</strong>、<strong>規模與流動性</strong>、
+         以及成分股的集中度。這些資料交易所沒有提供，需要到各投信官網或
+         投信投顧公會查詢。</p>
+    </div>
+  </details>
+
+  <!-- 搜尋 -->
+  <section class="search-block">
+    <div class="search-box">
+      <span class="search-ico">🔍</span>
+      <input id="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="輸入 ETF 代號或名稱，例如 0050 或 高股息" aria-label="搜尋 ETF">
+      <button id="clearBtn" class="search-clear" hidden aria-label="清除">✕</button>
+    </div>
+    <ul id="suggest" class="suggest" hidden></ul>
+    <div class="quickpicks">
+      <span class="quickpicks-label">熱門：</span>
+      <button class="chip" data-code="0050">元大台灣50</button>
+      <button class="chip" data-code="0056">元大高股息</button>
+      <button class="chip" data-code="00878">國泰永續高股息</button>
+      <button class="chip" data-code="00919">群益台灣精選高息</button>
+      <button class="chip" data-code="006208">富邦台50</button>
+      <button class="chip" data-code="00679B">元大美債20年</button>
+    </div>
+  </section>
+
+  <div id="loading" class="state-msg">正在載入 ETF 資料…</div>
+  <div id="errorBox" class="state-msg state-error" hidden></div>
+
+  <!-- 個別 ETF -->
+  <section id="result" hidden>
+    <div class="card etf-head">
+      <div class="stock-id">
+        <h2><span id="eName">—</span> <span id="eCode" class="code">—</span></h2>
+        <span id="eMarket" class="tag">—</span>
+        <span id="eKind" class="tag tag-quiet">—</span>
+      </div>
+      <p id="eFull" class="etf-full">—</p>
+
+      <div class="etf-prem">
+        <div class="etf-prem-main">
+          <span class="label">折溢價率</span>
+          <strong id="ePrem">—</strong>
+          <span id="ePremWord" class="etf-prem-word">—</span>
+        </div>
+        <div class="etf-prem-calc">
+          <div><span>市價</span><b id="ePrice">—</b></div>
+          <div class="op">−</div>
+          <div><span>預估淨值</span><b id="eNav">—</b></div>
+          <div class="op">÷</div>
+          <div><span>淨值</span><b id="eNav2">—</b></div>
+        </div>
+      </div>
+
+      <div id="premNote" class="dilution-note"></div>
+    </div>
+  </section>
+
+  <!-- 全市場分佈 -->
+  <section id="board" hidden>
+    <div class="card">
+      <h3>全市場折溢價分佈</h3>
+      <p class="rules-sub">共 <b id="bCount">—</b> 檔有淨值資料。折溢價率中位數
+        <b id="bMedian">—</b>，其中溢價超過 1% 有 <b id="bOver">—</b> 檔、
+        折價超過 1% 有 <b id="bUnder">—</b> 檔。</p>
+      <div class="board-grid">
+        <div>
+          <h4 class="board-title rich">溢價最高（市價高於淨值）</h4>
+          <ol id="topPrem" class="board-list"></ol>
+        </div>
+        <div>
+          <h4 class="board-title cheap">折價最深（市價低於淨值）</h4>
+          <ol id="topDisc" class="board-list"></ol>
+        </div>
+      </div>
+      <p class="rules-note">排行僅為當日數值的客觀排序，不代表任何一檔值得或不值得買進。
+        折溢價會隨造市與流動性變動，且不同類型（債券、期貨、槓桿反向、連結海外市場者）
+        的正常區間本來就不同，跨類型比較意義有限。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot wrap">
+  <p class="disclaimer">
+    <strong>免責聲明：</strong>本頁顯示的折溢價率，是把交易所公開的收盤價與各投信公布的
+    <strong>預估淨值</strong>相減後除以淨值所得，屬於機械式的算術結果，
+    <strong>不構成投資建議、分析意見或買賣要約</strong>。
+    預估淨值非官方收盤淨值，實際申購贖回價格以各投信公告為準。
+    本頁未涵蓋內扣費用、追蹤誤差與成分股風險，這些因素對長期報酬的影響往往大於折溢價。
+  </p>
+  <p class="foot-src">
+    資料來源：臺灣證券交易所即時資訊系統（各投信預估淨值）、證交所與櫃買中心收盤行情。
+    盤後更新，非即時報價。本站不保證資料完整與正確，請以各交易所與投信公告為準。
+  </p>
+</footer>
+
+<script src="assets/etf.js"></script>
+</body>
+</html>
