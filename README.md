@@ -69,12 +69,25 @@ fwdFormula: (ytd, n, eps, l, m, h, mult, risk) =>
 輸出一律以「參數 → 對應價」的形式呈現（例如「本益比 15.94 倍 → 1,185 元」），
 而非「便宜／合理／昂貴」這類帶有判斷的說法。
 
-**九種公式**，依計算基礎分組：
+**十一種公式**，依計算基礎分組：
 
 - **本益比家族**：年化 EPS ｜ 近四季 EPS ｜ PEG ｜ 月營收動能 ｜ 葛拉漢公式
+- **上限類**：葛拉漢數字（本益比 × 股價淨值比 的聯合上限，不含成長假設）
+- **現金流類**：股價營業現金流比（P/OCF）
 - **淨值類**：ROE 法 ｜ 股價淨值比（P/B）
 - **營收類**：股價營收比（P/S）
 - **股利類**：股利法
+
+**葛拉漢公式與葛拉漢數字是兩個不同的東西**，卡片標籤與說明都刻意分開：
+公式 `V = EPS × (8.5 + 2g)` 是**估值**，吃使用者輸入的成長率 g；
+數字 `V = √(本益比 × 股價淨值比 × EPS × 每股淨值)` 是**上限**，不含任何成長假設，
+把葛拉漢那兩條門檻（本益比 ≤ 15、股價淨值比 ≤ 1.5）合併成對乘積的單一限制。
+本站不寫死 22.5，直接沿用使用者設定的三組倍數配對相乘 —— 設成 15 與 1.5
+就回到原始版本。
+
+**P/OCF 用的是營業現金流，不是自由現金流**：公開資訊觀測站的彙總現金流量表
+只有營業、投資、籌資三大活動的合計，**沒有資本支出、也沒有折舊攤銷**，
+所以台股做不出美股頁那種自由現金流。差別在說明區與卡片警語都寫明。
 
 ## ETF 為什麼獨立一頁
 
@@ -280,6 +293,7 @@ https://<你的帳號>.github.io/stock-fair-value/
 | 季報累計每股盈餘／營收／淨利 | 證交所、櫃買中心、公開資訊觀測站 | 每交易日累積 |
 | 每月營業收入 | 證交所 `t187ap05_L`、櫃買中心 | 每交易日 |
 | 在外流通股數、實收資本額 | 證交所 `t187ap03_L`、櫃買中心 `mopsfin_t187ap03_O` | 每交易日 |
+| 季度營業活動現金流 | 公開資訊觀測站 `t163sb20` | 每交易日累積 |
 | ETF 預估淨值 | 證交所即時系統 `all_etf.txt` | 每交易日 |
 | 美股財報（EPS／營收／淨利／股東權益／現金流／股利） | SEC EDGAR XBRL frames API | 每交易日 |
 | 美股收盤價、市值、產業別 | 那斯達克選股器 `api.nasdaq.com/api/screener/stocks` | 每交易日 |
@@ -554,7 +568,7 @@ SEC_CONTACT="you@example.com" python3 scripts/fetch_us.py
 收集除權配股事件、季報與月營收（每日累積）：
 
 ```bash
-python3 scripts/fetch_exrights.py && python3 scripts/fetch_quarterly.py && python3 scripts/fetch_revenue.py
+python3 scripts/fetch_exrights.py && python3 scripts/fetch_quarterly.py && python3 scripts/fetch_revenue.py && python3 scripts/fetch_cashflow.py
 ```
 
 重建近 5 年評價區間（約 180 次請求、5 分鐘）：
@@ -586,6 +600,7 @@ python3 scripts/build_bands.py --years 5
 │   ├── exrights.json       除權配股事件（攤薄修正用）
 │   ├── quarterly.json      季報 EPS／營收／淨利 + 歷年財報
 │   ├── revenue.json        每月營業收入
+│   ├── cashflow.json       季度營業活動現金流（P/OCF 用）
 │   ├── etf.json            ETF 淨值與折溢價
 │   ├── us.json             美股快照 + 同業分位數（約 1.6 MB）
 │   └── us_fin.json         美股年度／累計財報明細（約 660 KB）
@@ -595,6 +610,7 @@ python3 scripts/build_bands.py --years 5
 │   ├── fetch_exrights.py   收集除權配股事件
 │   ├── fetch_quarterly.py  收集季報每股盈餘／營收／淨利
 │   ├── fetch_revenue.py    收集每月營業收入
+│   ├── fetch_cashflow.py   收集季度營業活動現金流
 │   ├── fetch_etf.py        抓 ETF 淨值與折溢價
 │   ├── fetch_us.py         抓美股財報（SEC）與股價（那斯達克）
 │   └── serve.py            本機預覽伺服器

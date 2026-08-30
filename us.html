@@ -141,6 +141,18 @@
       <p id="verdict" class="verdict">—</p>
     </div>
 
+
+    <!-- 捲到公式卡時，彙總已在畫面外，這條列補上即時回饋 -->
+    <div id="miniBar" class="minibar" aria-live="polite">
+      <span class="minibar-label" id="mbLabel" data-en="Summary">彙總</span>
+      <span class="minibar-cells">
+        <span class="minibar-cell lo"><i id="mbL1">—</i><b id="mbV1">—</b></span>
+        <span class="minibar-cell mid"><i id="mbL2">—</i><b id="mbV2">—</b></span>
+        <span class="minibar-cell hi"><i id="mbL3">—</i><b id="mbV3">—</b></span>
+      </span>
+      <span class="minibar-count" id="mbCount">—</span>
+    </div>
+
     <!-- 計算公式 -->
     <div id="methods" class="methods"></div>
 

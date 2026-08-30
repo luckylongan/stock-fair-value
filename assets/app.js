@@ -23,6 +23,7 @@
   let QUARTERLY = {};     // 代號 -> {y, q, cum:累計EPS, rev:累計營收, ni:累計淨利}
   let QHISTORY = {};      // 代號 -> {"114/4":{e,r,n}, ...} 逐期財報，供算成長率
   let REVENUE = {};       // 代號 -> {ym, mo:已過月數, cum:累計營收, yoy}
+  let CASHFLOW = {};      // 代號 -> {y, q, ocf:年初至今累計營業現金流（百萬元）}
   let INDEX = new Map();  // 代號 -> 個股
   let current = null;     // 目前選定的個股
   let sugIdx = -1;        // 建議清單游標
@@ -34,13 +35,14 @@
     yHi: 6.25, yMid: 5, yLo: 3.125,
     r: 8, g: 2, mos: 25,
     psLo: 0.6, psMid: 1.2, psHi: 2.5,
+    ocfLo: 8, ocfMid: 15, ocfHi: 25,
     pegLo: 0.75, pegMid: 1, pegHi: 1.5,
     gCap: 40,
     customEps: 0,        // >0 時覆寫所有預估型 EPS，0 = 用網站算的
     grahamG: 5, grahamSpan: 2,
   };
   // 加了新方法就換 key：舊的儲存值不含新方法，沿用會讓預設關閉的項目被誤開
-  const OFF_KEY = "fv_off_methods_v2";
+  const OFF_KEY = "fv_off_methods_v3";
   // 股價營收比的合理倍數因產業而異極大（軟體 5~10 倍、通路 <0.5 倍），
   // 用一組固定預設值套全市場只會污染綜合中位數，所以預設不納入，
   // 讓使用者依同業調好參數後自行勾選 —— 對虧損股它仍是少數可用的方法之一。
@@ -101,7 +103,8 @@
       names: {
         pefwd: ["本益比法", "年化 EPS"], pe: ["本益比法", "近四季"],
         peg: ["本益成長比", ""], rev: ["月營收動能法", ""],
-        graham: ["葛拉漢公式", ""], roe: ["ROE 法", ""],
+        graham: ["葛拉漢公式", "成長版"], gnum: ["葛拉漢數字", "上限版"],
+        ocf: ["股價營業現金流比", ""], roe: ["ROE 法", ""],
         pb: ["股價淨值比法", ""], ps: ["股價營收比", ""], div: ["股利法", ""],
       },
       proCols: ["便宜價", "合理價", "昂貴價"],
@@ -110,6 +113,12 @@
       labelPb: (v) => `P/B ${fmt(v)} 倍`,
       labelYield: (v) => `殖利率 ${fmt(v)}%`,
       labelPeg: (v) => `PEG ${fmt(v, 2)}`,
+      labelProduct: (v) => `乘積 ${fmt(v, 1)}`,
+      tagCeiling: "不含成長假設",
+      srcOcf: (v) => `每股營業現金流 ${fmt(v)} 元`,
+      gnBasis: (pe, pb) =>
+        `本益比 ${fmt(pe[0])} / ${fmt(pe[1])} / ${fmt(pe[2])}　×　` +
+        `股價淨值比 ${fmt(pb[0])} / ${fmt(pb[1])} / ${fmt(pb[2])}`,
       labelG: (v) => `g ${fmt(v, 1)}%`,
       tagCustomEps: "你輸入的 EPS",
       tagAnnualized: (y, q) => `年化 · ${y}Q${q}`,
@@ -132,6 +141,7 @@
       closeOn: (d) => `收盤 ${d}`,
       includeAria: "是否納入綜合評估",
       scaleMin: "最小", scaleMid: "中位數", scaleMax: "最大",
+      usedCount: (n) => `納入 ${n} 種公式`,
       scaleCheap: "便宜", scaleFair: "合理", scaleRich: "昂貴",
       pricePrefix: "現價",
       noHit: (q) => `找不到「${q}」——請輸入股票代號或公司名稱`,
@@ -208,6 +218,37 @@
       marketCount: (m, n) => `${m} ${n} 檔`,
       listSep: "、",
       f: {
+        ocfNoData: "尚無現金流量表資料（公司申報進度不一，本站每日累積），此法暫不適用。",
+        ocfNoShares: "缺少在外流通股數，無法換算每股營業現金流。",
+        ocfNegative: (y, q, v) =>
+          `${y}Q${q} 累計營業活動現金流為 ${fmt(v / 100, 1)} 億元（非正值），` +
+          "代表本業收到的現金不足以支應營運，此法不適用。金融保險業的現金流量表" +
+          "結構不同，出現負值屬常態，不宜據此解讀。",
+        ocfFormula: (y, q, cum, annual, sh, ps, cur, lo, mid, hi) =>
+          `年化營業現金流 ＝ ${y}Q${q} 累計 ${fmt(cum / 100, 1)} 億 ÷ ${q} 季 × 4 ＝ ${fmt(annual / 100, 1)} 億<br>` +
+          `每股營業現金流 ＝ ${fmt(annual / 100, 1)} 億 ÷ ${fmt(sh / 100, 1)} 億股 ＝ ${fmt(ps)} 元　` +
+          `目前 ${fmt(cur)} 倍<br>` +
+          `對應價 ＝ ${fmt(ps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+          `<br><span class="formula-warn">※ 這是<b>營業</b>現金流，還沒扣資本支出 —— 公開資訊觀測站的彙總` +
+          `現金流量表只有三大活動的合計，沒有資本支出欄位，所以台股算不出美股頁那種自由現金流。` +
+          `重資本支出的產業（半導體、電信、航運）實際能自由運用的錢會比這裡少很多。<br>` +
+          `另外現金流受營運資金波動影響很大，用半年推全年容易失真（存貨、應收帳款的季節性），` +
+          `建議搭配多年趨勢一起看。</span>`,
+        gnNoEps: "近四季每股盈餘為負或無資料，葛拉漢數字需要正的盈餘。",
+        gnNoBvps: "缺少每股淨值資料，葛拉漢數字需要盈餘與淨值兩者。",
+        gnFormula: (pe, pb, prod, eps, bvps, vals) =>
+          `葛拉漢數字 ＝ √(目標本益比 × 目標股價淨值比 × EPS × 每股淨值)<br>` +
+          `乘積 ＝ ${fmt(pe[0])}×${fmt(pb[0])} / ${fmt(pe[1])}×${fmt(pb[1])} / ${fmt(pe[2])}×${fmt(pb[2])}` +
+          `　＝ ${fmt(prod[0], 1)} / ${fmt(prod[1], 1)} / ${fmt(prod[2], 1)}<br>` +
+          `代入 EPS ${fmt(eps)} × 每股淨值 ${fmt(bvps)} 開根號 ＝ ` +
+          `${fmt(vals[0])} / ${fmt(vals[1])} / ${fmt(vals[2])} 元` +
+          `<br><span class="formula-warn">※ <b>這和上面的葛拉漢公式是兩回事。</b>` +
+          `公式 V ＝ EPS × (8.5 + 2g) 是<b>估值</b>，吃你輸入的成長率，g 給多少答案就差多少；` +
+          `這個數字是<b>上限</b>，完全不含成長假設，只是把「本益比」與「股價淨值比」兩個條件` +
+          `同時套上去，算出兩者都不超標的最高價格。<br>` +
+          `葛拉漢原始的門檻是本益比 15 × 股價淨值比 1.5 ＝ 22.5；這裡直接沿用你在參數區設定的` +
+          `倍數配對相乘，把那兩個數字設成 15 與 1.5 就會回到原始版本。` +
+          `它對輕資產、高成長公司天生嚴苛（淨值低），不適合單獨使用。</span>`,
         dilutionAdj: (list, factor) =>
           `<br><span class="formula-adj">↳ 已依 ${list} 攤薄（÷ ${fmt(factor, 4)}）</span>`,
         dilutionItem: (d, k) => `${d} 配股 ${fmt(k * 100, 1)}%`,
@@ -299,7 +340,8 @@
       names: {
         pefwd: ["P/E method", "forward"], pe: ["P/E method", "trailing"],
         peg: ["PEG ratio", ""], rev: ["Monthly revenue momentum", ""],
-        graham: ["Graham formula", ""], roe: ["Return on equity", ""],
+        graham: ["Graham formula", "growth"], gnum: ["Graham Number", "ceiling"],
+        ocf: ["Price / operating cash flow", ""], roe: ["Return on equity", ""],
         pb: ["Price / book", ""], ps: ["Price / sales", ""], div: ["Dividend", ""],
       },
       proCols: ["Cheap", "Fair", "Expensive"],
@@ -308,6 +350,12 @@
       labelPb: (v) => `P/B ${fmt(v)}x`,
       labelYield: (v) => `yield ${fmt(v)}%`,
       labelPeg: (v) => `PEG ${fmt(v, 2)}`,
+      labelProduct: (v) => `product ${fmt(v, 1)}`,
+      tagCeiling: "no growth assumption",
+      srcOcf: (v) => `operating cash flow/share NT$${fmt(v)}`,
+      gnBasis: (pe, pb) =>
+        `P/E ${fmt(pe[0])} / ${fmt(pe[1])} / ${fmt(pe[2])}　×　` +
+        `P/B ${fmt(pb[0])} / ${fmt(pb[1])} / ${fmt(pb[2])}`,
       labelG: (v) => `g ${fmt(v, 1)}%`,
       tagCustomEps: "your EPS",
       tagAnnualized: (y, q) => `annualized · ${y}Q${q}`,
@@ -330,6 +378,7 @@
       closeOn: (d) => `close ${d}`,
       includeAria: "Include in the summary",
       scaleMin: "Min", scaleMid: "Median", scaleMax: "Max",
+      usedCount: (n) => `${n} formula${n === 1 ? "" : "s"} included`,
       scaleCheap: "Cheap", scaleFair: "Fair", scaleRich: "Expensive",
       pricePrefix: "Price",
       noHit: (q) => `No match for "${q}" — enter a ticker or company name`,
@@ -410,6 +459,40 @@
       marketCount: (m, n) => `${m} ${n}`,
       listSep: ", ",
       f: {
+        ocfNoData: "No cash flow statement yet (companies file on different schedules; this site accumulates them daily), so this method does not apply for now.",
+        ocfNoShares: "No share count available, so operating cash flow per share cannot be computed.",
+        ocfNegative: (y, q, v) =>
+          `${y}Q${q} cumulative operating cash flow was NT$${fmt(v, 0)}M (not positive), meaning the ` +
+          "core business did not generate enough cash to fund operations, so this method does not apply. " +
+          "Financial and insurance companies structure their cash flow statements differently and " +
+          "negative values are normal for them — do not read anything into it.",
+        ocfFormula: (y, q, cum, annual, sh, ps, cur, lo, mid, hi) =>
+          `Annualized operating cash flow = ${y}Q${q} cumulative NT$${fmt(cum, 0)}M ÷ ${q} quarters × 4 = NT$${fmt(annual, 0)}M<br>` +
+          `Operating cash flow per share = ${fmt(annual, 0)}M ÷ ${fmt(sh, 0)}M shares = NT$${fmt(ps)}　` +
+          `currently ${fmt(cur)}x<br>` +
+          `Price = ${fmt(ps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x` +
+          `<br><span class="formula-warn">※ This is <b>operating</b> cash flow, before capital expenditure. ` +
+          `The MOPS aggregate cash flow statement carries only the three activity totals and no capex line, ` +
+          `so Taiwan cannot produce the free cash flow the US edition uses. Capital-intensive industries ` +
+          `(semiconductors, telecom, shipping) keep far less than this figure suggests.<br>` +
+          `Operating cash flow also swings with working capital, so annualizing from half a year is easily ` +
+          `distorted by seasonal inventory and receivables. Read it alongside a multi-year trend.</span>`,
+        gnNoEps: "Trailing twelve-month EPS is negative or unavailable; the Graham Number needs positive earnings.",
+        gnNoBvps: "No book value per share available; the Graham Number needs both earnings and book value.",
+        gnFormula: (pe, pb, prod, eps, bvps, vals) =>
+          `Graham Number = √(target P/E × target P/B × EPS × book value per share)<br>` +
+          `Product = ${fmt(pe[0])}×${fmt(pb[0])} / ${fmt(pe[1])}×${fmt(pb[1])} / ${fmt(pe[2])}×${fmt(pb[2])}` +
+          `　= ${fmt(prod[0], 1)} / ${fmt(prod[1], 1)} / ${fmt(prod[2], 1)}<br>` +
+          `With EPS ${fmt(eps)} × book value ${fmt(bvps)}, the square root gives ` +
+          `NT$${fmt(vals[0])} / ${fmt(vals[1])} / ${fmt(vals[2])}` +
+          `<br><span class="formula-warn">※ <b>This is not the Graham formula above.</b> ` +
+          `That one, V = EPS × (8.5 + 2g), is a <b>valuation</b> driven by the growth rate you enter — ` +
+          `change g and the answer changes with it. This one is a <b>ceiling</b> with no growth assumption ` +
+          `at all: it applies the P/E and P/B limits simultaneously and returns the highest price at which ` +
+          `neither is breached.<br>` +
+          `Graham's original thresholds were P/E 15 × P/B 1.5 = 22.5; this uses the multiples you set under ` +
+          `Assumptions, paired and multiplied — set those two to 15 and 1.5 to get the original. ` +
+          `It is inherently harsh on asset-light, high-growth companies (low book value), so do not use it alone.</span>`,
         dilutionAdj: (list, factor) =>
           `<br><span class="formula-adj">↳ Diluted for ${list} (÷ ${fmt(factor, 4)})</span>`,
         dilutionItem: (d, k) => `${d} stock dividend ${fmt(k * 100, 1)}%`,
@@ -820,6 +903,70 @@
     };
   }
 
+  /* 3e. 股價營業現金流比（P/OCF）
+   *
+   *     站上其他公式全部建立在盈餘、淨值、營收、股利上，沒有一個看現金。
+   *     盈餘含折舊攤銷與各種應計項目，可以在不動用現金的情況下被調整；
+   *     營業活動現金流是真的收進來的錢。
+   *
+   *       年化營業現金流 = 年初至今累計 ÷ 已公布季數 × 4
+   *       每股營業現金流 = 年化營業現金流 ÷ 在外流通股數
+   *       對應價         = 每股營業現金流 × 你設定的 P/OCF 倍數
+   *
+   *     美股頁用的是自由現金流（再扣資本支出），台股做不到 —— 公開資訊
+   *     觀測站的彙總現金流量表只有三大活動的合計，沒有資本支出欄位。
+   */
+  function methodPocf(s) {
+    const c = CASHFLOW[s.c];
+    if (!c) return { na: M().f.ocfNoData };
+    if (!s.sh) return { na: M().f.ocfNoShares };
+    if (!(c.ocf > 0)) return { na: M().f.ocfNegative(c.y, c.q, c.ocf) };
+    const annual = (c.ocf / c.q) * 4;        // 百萬元
+    const ps = annual / s.sh;                // 每股（sh 也是百萬股，直接相除）
+    if (!(ps > 0)) return { na: M().f.ocfNegative(c.y, c.q, c.ocf) };
+    const [lo, mid, hi] = [params.ocfLo, params.ocfMid, params.ocfHi];
+    const cur = s.p / ps;
+    return {
+      cheap: ps * lo, fair: ps * mid, rich: ps * hi,
+      labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
+      tag: M().tagCurrent(cur),
+      basis: `<span class="basis-tag">${M().tagFixed}</span>${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}` +
+             `<span class="basis-src">${M().srcOcf(ps)}</span>`,
+      formula: M().f.ocfFormula(c.y, c.q, c.ocf, annual, s.sh, ps, cur, lo, mid, hi),
+    };
+  }
+
+  /* 3f. 葛拉漢數字（Graham Number）
+   *
+   *     和上面的葛拉漢公式是**兩個不同的東西**，卡片與說明都要講清楚：
+   *
+   *       葛拉漢公式  V = EPS × (8.5 + 2g)
+   *         → 估值，吃你輸入的成長率 g，g 給多少答案就差多少。
+   *       葛拉漢數字  V = √(目標本益比 × 目標股價淨值比 × EPS × 每股淨值)
+   *         → 上限，不含任何成長假設，只把「本益比」與「股價淨值比」兩個
+   *           條件同時套上去，算出兩者都不超標的最高價格。
+   *
+   *     葛拉漢原始的門檻是本益比 15 與股價淨值比 1.5，乘積 22.5；這裡改成
+   *     直接沿用你在參數區設定的三組本益比與股價淨值比，配對相乘 ——
+   *     設成 15 與 1.5 就會回到原始的 22.5。
+   */
+  function methodGrahamNum(s) {
+    if (!s.eps || s.eps <= 0) return { na: M().f.gnNoEps };
+    if (!s.bvps || s.bvps <= 0) return { na: M().f.gnNoBvps };
+    const pe = usable(s, "pe") || [params.peLo, params.peMid, params.peHi];
+    const pb = usable(s, "pb") || [params.pbLo, params.pbMid, params.pbHi];
+    const vals = [0, 1, 2].map((i) => Math.sqrt(pe[i] * pb[i] * s.eps * s.bvps));
+    const prod = [0, 1, 2].map((i) => pe[i] * pb[i]);
+    return {
+      cheap: vals[0], fair: vals[1], rich: vals[2],
+      labels: prod.map((v) => M().labelProduct(v)),
+      tag: M().tagCeiling,
+      basis: basisTag(usable(s, "pe") && usable(s, "pb"),
+                      M().gnBasis(pe, pb)),
+      formula: M().f.gnFormula(pe, pb, prod, s.eps, s.bvps, vals),
+    };
+  }
+
   /* 4. 本益比法 —— 近四季 EPS × 你選定的本益比倍數 */
   function methodPe(s) {
     if (!s.eps) return { na: M().f.peNoData };
@@ -858,6 +1005,8 @@
     { id: "peg", en: "PEG Ratio", fn: methodPeg },
     { id: "rev", en: "Revenue Momentum", fn: methodRevenue },
     { id: "graham", en: "Graham Formula", fn: methodGraham },
+    { id: "gnum", en: "Graham Number", fn: methodGrahamNum },
+    { id: "ocf", en: "Price / Operating Cash Flow", fn: methodPocf },
     { id: "roe", en: "Return on Equity", fn: methodRoe },
     { id: "pb", en: "P/B Ratio", fn: methodPb },
     { id: "ps", en: "P/S Ratio", fn: methodPs },
@@ -958,6 +1107,58 @@
   }
 
 
+  /* 迷你彙總列
+   *
+   * 彙總卡在頁面上方，九張公式卡從它下方一千多 px 才開始，所以使用者捲到
+   * 卡片去勾選時，彙總早就滾出畫面 —— 數字有重算，只是看不到，看起來就像
+   * 「勾了沒反應」。這條列在彙總卡不可見時貼在頂列下方，並在數字變動時閃一下。
+   */
+  let mbPrev = "";
+  let syncMiniBar = null;   // watchSummary() 回傳的重算函式
+  function renderMiniBar(labels, values, count) {
+    const bar = $("miniBar");
+    if (!bar) return;
+    ["mbL1", "mbL2", "mbL3"].forEach((id, i) => { const n = $(id); if (n) n.textContent = labels[i]; });
+    ["mbV1", "mbV2", "mbV3"].forEach((id, i) => { const n = $(id); if (n) n.textContent = values[i]; });
+    const c = $("mbCount");
+    if (c) c.textContent = count;
+    const key = values.join("|") + "|" + count;
+    if (mbPrev && mbPrev !== key) {
+      bar.classList.remove("bump");
+      void bar.offsetWidth;          // 重跑動畫
+      bar.classList.add("bump");
+    }
+    mbPrev = key;
+    if (syncMiniBar) syncMiniBar();
+  }
+
+  /** 彙總卡捲出畫面才顯示迷你列 —— 兩個同時看得到時它只是重複資訊。
+   *
+   *  用捲動事件而不是 IntersectionObserver：後者在某些內嵌／離螢幕的瀏覽器
+   *  環境裡不會觸發（實測完全不發 callback），而這個判斷失效的話迷你列就
+   *  永遠不出現，等於整個功能沒了。getBoundingClientRect 是同步且確定的。
+   */
+  function watchSummary() {
+    const bar = $("miniBar");
+    const card = document.querySelector(".summary");
+    if (!bar || !card) return;
+    const update = () => {
+      // 彙總卡整個捲到頂列上方時才顯示；結果區沒開時不顯示
+      const res = $("result");
+      if (res && res.hidden) { bar.classList.remove("show"); return; }
+      bar.classList.toggle("show", card.getBoundingClientRect().bottom < 70);
+    };
+    // 直接在 scroll 裡算，不做 rAF 節流：瀏覽器本來就把 scroll 併到每幀一次，
+    // 而一次 getBoundingClientRect 的成本可以忽略。用「旗標 + rAF」節流反而有
+    // 風險 —— rAF 在背景分頁或某些內嵌環境不跑，旗標會卡在 true，之後就再也
+    // 不更新了。
+    addEventListener("scroll", update, { passive: true });
+    addEventListener("resize", update, { passive: true });
+    document.addEventListener("langchange", update);
+    update();
+    return update;
+  }
+
   /* 專業版的彙總
    *
    * 三個價位分別取各公式「便宜／合理／昂貴」三欄的中位數（中位數比平均數
@@ -981,6 +1182,8 @@
     el.gScaleL.innerHTML = `<i>${M().scaleCheap}</i> <b>${fmt(cheap)}</b>`;
     el.gScaleM.innerHTML = `<i>${M().scaleFair}</i> <b>${fmt(fair)}</b>`;
     el.gScaleR.innerHTML = `<i>${M().scaleRich}</i> <b>${fmt(rich)}</b>`;
+    renderMiniBar([M().scaleCheap, M().scaleFair, M().scaleRich],
+                  [fmt(cheap), fmt(fair), fmt(rich)], M().usedCount(used.length));
     el.gaugePrice.textContent = fmt(s.p);
 
     if (cheap === null || !(cheap < rich)) {
@@ -1056,6 +1259,8 @@
     el.gScaleL.innerHTML = `<i>${M().scaleMin}</i> <b>${fmt(lo)}</b>`;
     el.gScaleM.innerHTML = `<i>${M().scaleMid}</i> <b>${fmt(md)}</b>`;
     el.gScaleR.innerHTML = `<i>${M().scaleMax}</i> <b>${fmt(hi)}</b>`;
+    renderMiniBar([M().scaleMin, M().scaleMid, M().scaleMax],
+                  [fmt(lo), fmt(md), fmt(hi)], M().usedCount(used.length));
     el.gaugePrice.textContent = fmt(s.p);
 
     if (!all.length || !(lo < hi)) {
@@ -1167,7 +1372,7 @@
 
   async function boot() {
     try {
-      const [latest, bands, exr, qtr, rv] = await Promise.all([
+      const [latest, bands, exr, qtr, rv, cf] = await Promise.all([
         fetch("data/latest.json?t=" + Date.now()).then((r) => {
           if (!r.ok) throw new Error("latest.json " + r.status);
           return r.json();
@@ -1180,6 +1385,8 @@
                                                     .catch(() => null),
         fetch("data/revenue.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
                                                   .catch(() => null),
+        fetch("data/cashflow.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
+                                                   .catch(() => null),
       ]);
       ingest(latest);
       if (bands && bands.bands) BANDS = bands.bands;
@@ -1187,6 +1394,7 @@
       if (qtr && qtr.eps) QUARTERLY = qtr.eps;
       if (qtr && qtr.history) QHISTORY = qtr.history;
       if (rv && rv.rev) REVENUE = rv.rev;
+      if (cf && cf.cf) CASHFLOW = cf.cf;
       el.loading.hidden = true;
 
       const hash = decodeURIComponent(location.hash.replace("#", "")).trim();
@@ -1341,6 +1549,7 @@
                  pYHi: "yHi", pYMid: "yMid", pYLo: "yLo",
                  pR: "r", pG: "g", pMos: "mos",
                  pPsLo: "psLo", pPsMid: "psMid", pPsHi: "psHi",
+                 pOcfLo: "ocfLo", pOcfMid: "ocfMid", pOcfHi: "ocfHi",
                  pPegLo: "pegLo", pPegMid: "pegMid", pPegHi: "pegHi", pGCap: "gCap",
                  pGrahamG: "grahamG", pGrahamSpan: "grahamSpan", pCustomEps: "customEps" };
 
@@ -1450,5 +1659,6 @@
   } catch (_) { /* 忽略毀損的設定 */ }
   writeParams();
   bind();
+  syncMiniBar = watchSummary();
   boot();
 })();

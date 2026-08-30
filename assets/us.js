@@ -173,6 +173,7 @@
       includeAria: "是否納入計算值彙總",
       colLo: "低", colMid: "中", colHi: "高",
       scaleMin: "最小", scaleMid: "中位數", scaleMax: "最大",
+      usedCount: (n) => `納入 ${n} 種公式`,
       noteTtm: (fyl, fy, fye, n, ytd, l, eps) =>
         `<b>近四季（TTM）是重建出來的。</b>XBRL 有個結構性缺口：公司的會計年度
          <b>第四季通常不會單獨標記</b>，年報只揭露全年數字，直接把四個日曆季相加
@@ -344,6 +345,7 @@
       includeAria: "Include in the summary",
       colLo: "Low", colMid: "Mid", colHi: "High",
       scaleMin: "Min", scaleMid: "Median", scaleMax: "Max",
+      usedCount: (n) => `${n} formula${n === 1 ? "" : "s"} included`,
       noteTtm: (fyl, fy, fye, n, ytd, l, eps) =>
         `<b>Trailing twelve months is reconstructed.</b> XBRL has a structural gap: a company's
          <b>fiscal fourth quarter is usually not tagged separately</b>, because the annual report
@@ -871,6 +873,58 @@
     box.hidden = false;
   }
 
+  /* 迷你彙總列
+   *
+   * 彙總卡在頁面上方，九張公式卡從它下方一千多 px 才開始，所以使用者捲到
+   * 卡片去勾選時，彙總早就滾出畫面 —— 數字有重算，只是看不到，看起來就像
+   * 「勾了沒反應」。這條列在彙總卡不可見時貼在頂列下方，並在數字變動時閃一下。
+   */
+  let mbPrev = "";
+  let syncMiniBar = null;   // watchSummary() 回傳的重算函式
+  function renderMiniBar(labels, values, count) {
+    const bar = $("miniBar");
+    if (!bar) return;
+    ["mbL1", "mbL2", "mbL3"].forEach((id, i) => { const n = $(id); if (n) n.textContent = labels[i]; });
+    ["mbV1", "mbV2", "mbV3"].forEach((id, i) => { const n = $(id); if (n) n.textContent = values[i]; });
+    const c = $("mbCount");
+    if (c) c.textContent = count;
+    const key = values.join("|") + "|" + count;
+    if (mbPrev && mbPrev !== key) {
+      bar.classList.remove("bump");
+      void bar.offsetWidth;          // 重跑動畫
+      bar.classList.add("bump");
+    }
+    mbPrev = key;
+    if (syncMiniBar) syncMiniBar();
+  }
+
+  /** 彙總卡捲出畫面才顯示迷你列 —— 兩個同時看得到時它只是重複資訊。
+   *
+   *  用捲動事件而不是 IntersectionObserver：後者在某些內嵌／離螢幕的瀏覽器
+   *  環境裡不會觸發（實測完全不發 callback），而這個判斷失效的話迷你列就
+   *  永遠不出現，等於整個功能沒了。getBoundingClientRect 是同步且確定的。
+   */
+  function watchSummary() {
+    const bar = $("miniBar");
+    const card = document.querySelector(".summary");
+    if (!bar || !card) return;
+    const update = () => {
+      // 彙總卡整個捲到頂列上方時才顯示；結果區沒開時不顯示
+      const res = $("result");
+      if (res && res.hidden) { bar.classList.remove("show"); return; }
+      bar.classList.toggle("show", card.getBoundingClientRect().bottom < 70);
+    };
+    // 直接在 scroll 裡算，不做 rAF 節流：瀏覽器本來就把 scroll 併到每幀一次，
+    // 而一次 getBoundingClientRect 的成本可以忽略。用「旗標 + rAF」節流反而有
+    // 風險 —— rAF 在背景分頁或某些內嵌環境不跑，旗標會卡在 true，之後就再也
+    // 不更新了。
+    addEventListener("scroll", update, { passive: true });
+    addEventListener("resize", update, { passive: true });
+    document.addEventListener("langchange", update);
+    update();
+    return update;
+  }
+
   /* 計算值彙總
    *
    * 只做敘述統計：把各公式在你設定的參數下算出的數值蒐集起來，report
@@ -895,6 +949,8 @@
     el.gScaleL.innerHTML = `<i>${M().scaleMin}</i> <b>${fmt(lo)}</b>`;
     el.gScaleM.innerHTML = `<i>${M().scaleMid}</i> <b>${fmt(md)}</b>`;
     el.gScaleR.innerHTML = `<i>${M().scaleMax}</i> <b>${fmt(hi)}</b>`;
+    renderMiniBar([M().scaleMin, M().scaleMid, M().scaleMax],
+                  [fmt(lo), fmt(md), fmt(hi)], M().usedCount(used.length));
     el.gaugePrice.textContent = fmt(s.p);
 
     if (!all.length || !(lo < hi)) {
@@ -1136,5 +1192,6 @@
   } catch (_) { /* 忽略毀損的設定 */ }
   writeParams();
   bind();
+  syncMiniBar = watchSummary();
   boot();
 })();

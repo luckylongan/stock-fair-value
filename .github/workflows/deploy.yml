@@ -55,6 +55,12 @@ jobs:
         run: python3 scripts/fetch_revenue.py
         continue-on-error: true
 
+      # 現金流量表同樣要每天累積（各公司申報時間不同）；走公開資訊觀測站，
+      # 不是 openapi.twse.com.tw —— 後者會擋 GitHub Actions 的雲端 IP
+      - name: 收集營業活動現金流
+        run: python3 scripts/fetch_cashflow.py
+        continue-on-error: true
+
       # ETF 淨值來自證交所即時系統，可能擋雲端 IP，失敗不影響其他資料
       - name: 抓取 ETF 淨值與折溢價
         run: python3 scripts/fetch_etf.py

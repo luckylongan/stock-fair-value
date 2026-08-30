@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-en="What's Your Price? | Taiwan Calculator">幾塊你要買？ ｜ 計算版</title>
-<meta name="description" content="台股財務計算工具箱：以本益比、股價淨值比、殖利率、葛拉漢公式等九種公開財務公式，依你自訂的假設參數計算對應股價。資料取自證交所與櫃買中心公開資訊，不提供投資建議。"
+<meta name="description" content="台股財務計算工具箱：以本益比、股價淨值比、殖利率、葛拉漢公式、營業現金流等十一種公開財務公式，依你自訂的假設參數計算對應股價。資料取自證交所與櫃買中心公開資訊，不提供投資建議。"
       data-en="Taiwan stock financial calculator: nine public finance formulas — P/E, P/B, dividend yield, the Graham formula and more — computing a corresponding price from the assumptions you set. Data from the TWSE and TPEx. Not investment advice.">
 <link rel="stylesheet" href="assets/style.css">
 <script src="assets/i18n.js"></script>
@@ -18,7 +18,7 @@
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,20 10,12.5 15.5,17 24.5,6"/><polyline points="19,6 24.5,6 24.5,11.5"/></svg></span>
       <div>
         <h1 data-en="What&#39;s Your Price?">幾塊你要買？</h1>
-        <p class="brand-sub" data-en="Taiwan stocks · Financial calculator · 9 formulas · You set the assumptions">財務計算工具箱 · 九種公式 · 假設參數由你設定</p>
+        <p class="brand-sub" data-en="Taiwan stocks · Financial calculator · 11 formulas · You set the assumptions">財務計算工具箱 · 十一種公式 · 假設參數由你設定</p>
       </div>
     </div>
     <div class="topbar-actions">
@@ -146,6 +146,18 @@
       <p id="verdict" class="verdict">—</p>
     </div>
 
+
+    <!-- 捲到公式卡時，彙總已在畫面外，這條列補上即時回饋 -->
+    <div id="miniBar" class="minibar" aria-live="polite">
+      <span class="minibar-label" id="mbLabel" data-en="Summary">彙總</span>
+      <span class="minibar-cells">
+        <span class="minibar-cell lo"><i id="mbL1">—</i><b id="mbV1">—</b></span>
+        <span class="minibar-cell mid"><i id="mbL2">—</i><b id="mbV2">—</b></span>
+        <span class="minibar-cell hi"><i id="mbL3">—</i><b id="mbV3">—</b></span>
+      </span>
+      <span class="minibar-count" id="mbCount">—</span>
+    </div>
+
     <!-- 計算公式 -->
     <div id="methods" class="methods"></div>
 
@@ -249,6 +261,26 @@
         </div>
 
         <div class="param-group">
+          <h4 data-en="Price / operating cash flow multiples">股價營業現金流比倍數（P/OCF）</h4>
+          <div class="param-row">
+            <label><span data-en="Low">低</span> <input type="number" id="pOcfLo" value="8" min="1" max="200" step="1"> <span data-en="x">倍</span></label>
+            <label><span data-en="Mid">中</span> <input type="number" id="pOcfMid" value="15" min="1" max="200" step="1"> <span data-en="x">倍</span></label>
+            <label><span data-en="High">高</span> <input type="number" id="pOcfHi" value="25" min="1" max="200" step="1"> <span data-en="x">倍</span></label>
+          </div>
+          <p class="param-note i18n-zh">
+            這是<strong>營業</strong>現金流，還沒扣資本支出。重資本支出的產業
+            （半導體、電信、航運）實際能自由運用的錢比這個數字少很多，倍數要抓得比較低。
+            全市場約有三分之一的公司營業現金流為負，那些會標示不適用。
+          </p>
+          <p class="param-note i18n-en">
+            This is <strong>operating</strong> cash flow, before capital expenditure.
+            Capital-intensive industries (semiconductors, telecom, shipping) keep far less than this
+            figure suggests, so use lower multiples for them. About a third of the market has
+            negative operating cash flow; those report that the method does not apply.
+          </p>
+        </div>
+
+        <div class="param-group">
           <h4 data-en="PEG ratio">本益成長比（PEG）</h4>
           <div class="param-row">
             <label><span data-en="Low PEG">低 PEG</span> <input type="number" id="pPegLo" value="0.75" min="0.1" max="5" step="0.05"></label>
@@ -301,7 +333,7 @@
 
     <!-- 方法說明 -->
     <details class="card explain">
-      <summary><h3 data-en="How do the nine formulas work?">九種公式怎麼算？</h3></summary>
+      <summary><h3 data-en="How do the eleven formulas work?">十一種公式怎麼算？</h3></summary>
       <div class="explain-body i18n-zh">
         <h4>1. 本益比法 —— 年化 EPS（Forward P/E）</h4>
         <p>交易所的本益比是用<strong>近四季 EPS</strong> 算的，反映過去一整年；
@@ -353,6 +385,63 @@
            EPS 預設採用本站依季報／月營收算出的預估值，你也可以在參數區覆寫成自己的數字。</p>
         <p>需要注意：此式是 1960 年代的經驗公式，未考慮利率環境（原著另有以 AAA 公司債
            殖利率調整的版本），對高成長股會給出很高的倍數，請自行判斷適用性。</p>
+
+        <h4>5b. 葛拉漢數字（Graham Number）—— 和上面那個不是同一件事</h4>
+        <p><strong>先講清楚差別，這兩個很容易混。</strong>上面第 5 種是葛拉漢<strong>公式</strong>，
+           這個是葛拉漢<strong>數字</strong>，出處相同但用途完全相反：</p>
+        <table class="rules-table">
+          <tr><td><b>葛拉漢公式</b><br>V = EPS × (8.5 + 2g)</td>
+              <td><b>估值</b>　吃你輸入的成長率 g，g 給多少答案就差多少。
+                  它回答「如果它照這個速度成長，值多少？」</td></tr>
+          <tr><td><b>葛拉漢數字</b><br>V = √(本益比 × 股價淨值比 × EPS × 每股淨值)</td>
+              <td><b>上限</b>　完全不含成長假設。
+                  它回答「在不違反估值紀律的前提下，最多能付多少？」</td></tr>
+        </table>
+        <p>葛拉漢在《The Intelligent Investor》給防禦型投資人的兩條門檻是
+           <strong>本益比不超過 15</strong>、<strong>股價淨值比不超過 1.5</strong>。
+           但這兩條分開看會有漏洞 —— 一家本益比 8 倍、股價淨值比 3 倍的公司，
+           兩條各過一條卻可能兩邊都不便宜。所以葛拉漢把它們合併成一條，
+           限制的是<strong>兩者的乘積</strong>：</p>
+        <pre>本益比 × 股價淨值比 ≤ 15 × 1.5 = 22.5
+
+而 本益比 × 股價淨值比 = (股價 ÷ EPS) × (股價 ÷ 每股淨值)
+                      = 股價² ÷ (EPS × 每股淨值)
+
+所以 股價 ≤ √(22.5 × EPS × 每股淨值)</pre>
+        <p>右邊那個開根號就是葛拉漢數字。本站不寫死 22.5，而是<strong>直接沿用你在
+           「計算參數」設定的三組本益比與股價淨值比配對相乘</strong> ——
+           把它們設成 15 與 1.5，就會回到葛拉漢的原始版本。</p>
+        <p><strong>它對誰不公平：</strong>公式裡有每股淨值，所以品牌、專利、軟體這些
+           不進資產負債表的資產完全不算數。輕資產的軟體、IC 設計、通路公司天生就會
+           被它判定為「太貴」，這不是它們真的貴，是這個公式看不到它們的資產。
+           台股還有另一個問題 —— 它假設盈餘與淨值都是穩定的，景氣循環股在獲利高峰時
+           EPS 灌水，算出來的上限會跟著虛高。</p>
+
+        <h4>10. 股價營業現金流比（P/OCF）</h4>
+        <p>前面九種公式全部建立在<strong>盈餘、淨值、營收、股利</strong>上，
+           沒有一個看現金。盈餘含折舊攤銷與各種應計項目，可以在不動用任何現金的
+           情況下被調整；營業活動現金流是<strong>真的收進來的錢</strong>。
+           兩者長期背離通常值得追究。</p>
+        <pre>年化營業現金流 = 年初至今累計 ÷ 已公布季數 × 4
+每股營業現金流 = 年化營業現金流 ÷ 在外流通股數
+對應價         = 每股營業現金流 × 你設定的 P/OCF 倍數</pre>
+        <p>以台積電為例：本益比 28 倍，但股價營業現金流比只有 21 倍 ——
+           因為它每年提列的折舊極高，那筆錢在會計上是費用、實際上並沒有流出去。
+           重資產產業普遍會出現這種「現金流比帳面盈餘好看」的情形。</p>
+        <p><strong>三個限制要先知道。</strong></p>
+        <p>其一，這是<strong>營業</strong>現金流，<strong>還沒扣資本支出</strong>。
+           美股頁用的是自由現金流（再扣掉資本支出），台股做不到同一件事 ——
+           公開資訊觀測站的彙總現金流量表<strong>只有營業、投資、籌資三大活動的合計，
+           沒有資本支出欄位，也沒有折舊攤銷</strong>，要拿到得逐檔翻財報附註。
+           所以台積電那 21 倍看起來便宜，但它每年的資本支出吃掉絕大部分營業現金流，
+           真正能自由運用的錢少很多。<strong>重資本支出的產業要自己把這一段扣回去。</strong></p>
+        <p>其二，<strong>現金流受營運資金波動影響極大</strong>。存貨、應收帳款的季節性
+           會讓單一期間的數字大幅跳動 —— 鴻海 115Q2 的累計營業現金流甚至是負的，
+           那不代表它不賺錢，是備料與帳期的時間差。用半年推全年容易失真，
+           務必搭配多年趨勢一起看。</p>
+        <p>其三，<strong>金融保險業不適用</strong>。銀行的現金流量表結構完全不同，
+           營業活動出現大額負值屬常態，不能照字面解讀。全市場約有三分之一的公司
+           營業現金流為負或缺資料，這些會直接標示不適用。</p>
 
         <h4>6. ROE 法（股東權益報酬率法）</h4>
         <p>用公司「幫股東賺錢的效率」反推它的淨值該值多少倍。由高登成長模型推導：</p>
@@ -473,6 +562,70 @@ price                    = estimated annual EPS × your P/E multiple</pre>
         <p>Worth noting: this is an empirical formula from the 1960s that ignores the interest-rate
            environment (the original also has a version adjusted by AAA corporate bond yields) and
            produces very high multiples for high-growth companies. Judge its applicability yourself.</p>
+
+        <h4>5b. The Graham Number — not the same thing as the formula above</h4>
+        <p><strong>The difference first, because these two are easily confused.</strong>
+           Method 5 above is the Graham <strong>formula</strong>; this is the Graham
+           <strong>Number</strong>. Same author, opposite purpose:</p>
+        <table class="rules-table">
+          <tr><td><b>Graham formula</b><br>V = EPS × (8.5 + 2g)</td>
+              <td><b>A valuation.</b> Driven by the growth rate you enter — change g and the answer
+                  changes with it. It answers "what is it worth if it grows at this rate?"</td></tr>
+          <tr><td><b>Graham Number</b><br>V = √(P/E × P/B × EPS × book value)</td>
+              <td><b>A ceiling.</b> No growth assumption at all. It answers "what is the most I can
+                  pay without breaking valuation discipline?"</td></tr>
+        </table>
+        <p>In <em>The Intelligent Investor</em> Graham gives the defensive investor two thresholds:
+           <strong>P/E no higher than 15</strong> and <strong>P/B no higher than 1.5</strong>. Taken
+           separately they leave a gap — a company at 8x earnings and 3x book passes one and fails
+           the other, yet may be cheap on neither basis. So Graham combined them into a single
+           constraint on <strong>the product</strong>:</p>
+        <pre>P/E × P/B ≤ 15 × 1.5 = 22.5
+
+and  P/E × P/B = (price ÷ EPS) × (price ÷ book value)
+               = price² ÷ (EPS × book value)
+
+so   price ≤ √(22.5 × EPS × book value)</pre>
+        <p>That square root is the Graham Number. This site does not hard-code 22.5 — it
+           <strong>pairs and multiplies the three P/E and P/B multiples you set under
+           "Assumptions"</strong>. Set those to 15 and 1.5 and you get Graham's original.</p>
+        <p><strong>Who it treats unfairly:</strong> book value is in the formula, so brands,
+           patents and software that never reach the balance sheet count for nothing. Asset-light
+           software, IC design and distribution companies are flagged "too expensive" by
+           construction — not because they are expensive, but because this formula cannot see their
+           assets. It also assumes earnings and book value are stable, so cyclicals at a profit peak
+           carry an inflated EPS and therefore an inflated ceiling.</p>
+
+        <h4>10. Price / operating cash flow (P/OCF)</h4>
+        <p>The nine formulas above all rest on <strong>earnings, book value, revenue and
+           dividends</strong> — not one of them looks at cash. Earnings contain depreciation,
+           amortisation and every kind of accrual, and can be adjusted without any cash moving.
+           Operating cash flow is <strong>money actually received</strong>. A persistent gap between
+           the two is usually worth investigating.</p>
+        <pre>annualized operating cash flow = year-to-date ÷ quarters filed × 4
+operating cash flow per share  = annualized figure ÷ shares outstanding
+price                          = operating cash flow per share × your P/OCF multiple</pre>
+        <p>TSMC is a good example: 28x earnings but only 21x operating cash flow, because its annual
+           depreciation charge is enormous — an accounting expense that never leaves the bank.
+           Capital-heavy industries generally look better on cash flow than on reported earnings.</p>
+        <p><strong>Three limits to know up front.</strong></p>
+        <p>First, this is <strong>operating</strong> cash flow, <strong>before capital
+           expenditure</strong>. The US edition uses free cash flow (capex deducted); Taiwan cannot
+           do the same, because the MOPS aggregate cash flow statement carries
+           <strong>only the operating, investing and financing totals — no capex line and no
+           depreciation</strong>, which would mean opening every company's filing notes one by one.
+           So TSMC's 21x looks cheap, but its annual capex consumes most of that operating cash flow
+           and far less is genuinely free. <strong>For capital-intensive industries you have to
+           deduct that yourself.</strong></p>
+        <p>Second, <strong>cash flow swings hard with working capital</strong>. Seasonal inventory
+           and receivables move the figure sharply between periods — Hon Hai's cumulative operating
+           cash flow for 115Q2 was actually negative, which does not mean it is unprofitable, only
+           that stocking and payment timing fell that way. Annualizing from half a year is easily
+           distorted; read it alongside a multi-year trend.</p>
+        <p>Third, <strong>it does not apply to financials</strong>. Bank cash flow statements are
+           structured completely differently and large negative operating figures are normal, so the
+           number cannot be read literally. About a third of the market has negative or missing
+           operating cash flow; those report that the method does not apply.</p>
 
         <h4>6. Return on equity method</h4>
         <p>Uses how efficiently a company earns for its shareholders to infer what its book value

@@ -560,3 +560,45 @@ html[data-lang="zh"] /* 語言鈕要放得下 "中文" 兩個字，不能沿用�
 html[data-lang="zh"] .i18n-zh { display: revert !important; }
 html[data-lang="en"] .i18n-zh { display: none !important; }
 html[data-lang="en"] .i18n-en { display: revert !important; }
+
+
+/* ── 迷你彙總列 ─────────────────────────────────────────────
+   彙總卡在頁面上方，九張公式卡從它下方 1,100px 才開始、再往下延伸 1,200px，
+   所以使用者捲到卡片去勾選時，彙總早就滾出畫面 —— 數字有重算，只是看不到，
+   看起來就像「勾了沒反應」。這條列在彙總卡捲出畫面後貼在頂列下方補上回饋。 */
+.minibar {
+  position: sticky; top: 57px; z-index: 40;
+  margin: 0 0 14px; border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 9px 15px; font-size: 12.5px;
+  /* 預設不占空間，由 JS 依彙總卡是否可見決定 */
+  opacity: 0; transform: translateY(-6px); pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.minibar.show { opacity: 1; transform: none; pointer-events: auto; }
+.minibar-label { color: var(--text-dim); font-weight: 600; flex-shrink: 0; }
+.minibar-cells { display: flex; gap: 12px; flex-wrap: wrap; }
+.minibar-cell { display: flex; align-items: baseline; gap: 5px; }
+.minibar-cell i { font-style: normal; color: var(--text-dim); font-size: 11px; }
+.minibar-cell b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.minibar-cell.lo b  { color: var(--num-lo); }
+.minibar-cell.mid b { color: var(--num-mid); }
+.minibar-cell.hi b  { color: var(--num-hi); }
+.minibar-count { margin-left: auto; color: var(--text-dim); }
+/* 數字變動時閃一下，讓「勾選有生效」看得見 */
+@keyframes minibar-flash {
+  0% { background: var(--accent-sf); }
+  100% { background: transparent; }
+}
+.minibar.bump { animation: minibar-flash .5s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .minibar { transition: none; }
+  .minibar.bump { animation: none; }
+}
+@media (max-width: 640px) {
+  .minibar { top: 53px; font-size: 12px; padding: 8px 12px; gap: 10px; }
+  .minibar-count { margin-left: 0; width: 100%; }
+}
