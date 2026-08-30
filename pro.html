@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幾塊你要買？ ｜ 專業版</title>
-<meta name="description" content="台股估價的專業版：九種公式整合出便宜價／合理價／昂貴價，以紅綠位階顯示現價落點與進場條件。計算結果僅為機械式規則判定，不構成投資建議。">
+<title data-en="What's Your Price? | Taiwan Pro">幾塊你要買？ ｜ 專業版</title>
+<meta name="description" content="台股估價的專業版：九種公式整合出便宜價／合理價／昂貴價，以紅綠位階顯示現價落點與進場條件。計算結果僅為機械式規則判定，不構成投資建議。"
+      data-en="Taiwan stock valuation: nine formulas consolidated into cheap / fair / expensive prices with a rule-based position readout. Data from the TWSE and TPEx. Not investment advice.">
 <link rel="stylesheet" href="assets/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<script src="assets/i18n.js"></script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28' fill='none' stroke='%232563eb' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3,20 10,12.5 15.5,17 24.5,6'/><polyline points='19,6 24.5,6 24.5,11.5'/></svg>">
 </head>
 <body data-mode="pro">
 
 <header class="topbar">
   <div class="wrap topbar-inner">
     <div class="brand">
-      <span class="brand-mark">📈</span>
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,20 10,12.5 15.5,17 24.5,6"/><polyline points="19,6 24.5,6 24.5,11.5"/></svg></span>
       <div>
         <h1>幾塊你要買？</h1>
         <p class="brand-sub">專業版 · 九種公式整合 · 便宜／合理／昂貴位階</p>
@@ -27,7 +29,9 @@
       <button id="refreshBtn" class="btn btn-ghost" title="直接向證交所 / 櫃買中心抓取最新資料">
         <span class="btn-ico">⟳</span> 更新資料
       </button>
-      <button id="themeBtn" class="btn btn-icon" title="切換深淺色">◐</button>
+      <button id="langBtn" class="btn btn-icon btn-lang" title="Switch to English">EN</button>
+      <button id="themeBtn" class="btn btn-icon" title="切換深淺色"
+              data-title-en="Toggle dark mode">◐</button>
     </div>
   </div>
 </header>

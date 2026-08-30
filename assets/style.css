@@ -83,7 +83,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
   gap: 16px; padding-top: 12px; padding-bottom: 12px;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand-mark { font-size: 26px; line-height: 1; }
+/* 站名旁的折線圖。用 currentColor + var(--accent)，深色模式會自動換成亮藍 */
+.brand-mark { display: flex; align-items: center; color: var(--accent); }
+.brand-mark svg { width: 27px; height: 27px; display: block; }
 .brand h1 { font-size: 18px; }
 .brand-sub { margin: 1px 0 0; font-size: 11.5px; color: var(--text-dim); letter-spacing: .02em; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
@@ -540,3 +542,21 @@ body[data-mode="pro"] .verdict-note { color: inherit; opacity: .78; }
 .etf-caveats { margin: 8px 0 10px; padding-left: 20px; font-size: 13.5px; color: var(--text-mid); }
 .etf-caveats li { margin-bottom: 8px; line-height: 1.7; }
 .etf-caveats strong { color: var(--text); }
+
+
+/* ── 中英切換 ─────────────────────────────────────────────
+   靜態文字的中英兩份都在 HTML 裡，靠這兩條規則決定顯示哪一份。
+   用 !important 是因為被藏的那一份可能自己有 display:flex/grid。
+   兩條規則都不套用時（JS 還沒跑、或 JS 掛掉）預設顯示中文那一份，
+   英文那一份先藏著，這樣最壞情況是看到中文，而不是中英一起冒出來。 */
+/* 語言鈕要放得下 "中文" 兩個字，不能沿用圓形的 btn-icon 寬度 */
+.btn-lang { width: auto; min-width: 38px; padding: 7px 9px; font-size: 12px; font-weight: 600; }
+
+.i18n-en { display: none !important; }
+html[data-lang="zh"] /* 語言鈕要放得下 "中文" 兩個字，不能沿用圓形的 btn-icon 寬度 */
+.btn-lang { width: auto; min-width: 38px; padding: 7px 9px; font-size: 12px; font-weight: 600; }
+
+.i18n-en { display: none !important; }
+html[data-lang="zh"] .i18n-zh { display: revert !important; }
+html[data-lang="en"] .i18n-zh { display: none !important; }
+html[data-lang="en"] .i18n-en { display: revert !important; }

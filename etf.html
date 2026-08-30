@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幾塊你要買？ ｜ ETF 折溢價</title>
-<meta name="description" content="台股 ETF 的折溢價率查詢：市價與預估淨值的差距、全市場溢價與折價排行。ETF 沒有財報，個股的本益比與 ROE 等公式並不適用。">
+<title data-en="What's Your Price? | Taiwan ETF Premium">幾塊你要買？ ｜ ETF 折溢價</title>
+<meta name="description" content="台股 ETF 的折溢價率查詢：市價與預估淨值的差距、全市場溢價與折價排行。ETF 沒有財報，個股的本益比與 ROE 等公式並不適用。"
+      data-en="Premium and discount to NAV for Taiwan-listed ETFs, plus market-wide rankings. ETFs have no financial statements, so the P/E and ROE formulas used for individual stocks do not apply.">
 <link rel="stylesheet" href="assets/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<script src="assets/i18n.js"></script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28' fill='none' stroke='%232563eb' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3,20 10,12.5 15.5,17 24.5,6'/><polyline points='19,6 24.5,6 24.5,11.5'/></svg>">
 </head>
 <body data-mode="etf">
 
 <header class="topbar">
   <div class="wrap topbar-inner">
     <div class="brand">
-      <span class="brand-mark">📈</span>
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,20 10,12.5 15.5,17 24.5,6"/><polyline points="19,6 24.5,6 24.5,11.5"/></svg></span>
       <div>
         <h1>幾塊你要買？</h1>
         <p class="brand-sub">ETF 折溢價 · 市價與淨值的差距</p>
@@ -24,7 +26,9 @@
         <span id="dataDate" class="datainfo-date">載入中…</span>
         <span id="dataCount" class="datainfo-count"></span>
       </div>
-      <button id="themeBtn" class="btn btn-icon" title="切換深淺色">◐</button>
+      <button id="langBtn" class="btn btn-icon btn-lang" title="Switch to English">EN</button>
+      <button id="themeBtn" class="btn btn-icon" title="切換深淺色"
+              data-title-en="Toggle dark mode">◐</button>
     </div>
   </div>
 </header>
