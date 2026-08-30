@@ -17,13 +17,13 @@
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,20 10,12.5 15.5,17 24.5,6"/><polyline points="19,6 24.5,6 24.5,11.5"/></svg></span>
       <div>
-        <h1>幾塊你要買？</h1>
-        <p class="brand-sub">ETF 折溢價 · 市價與淨值的差距</p>
+        <h1 data-en="What&#39;s Your Price?">幾塊你要買？</h1>
+        <p class="brand-sub" data-en="Taiwan ETFs · Premium and discount to NAV">ETF 折溢價 · 市價與淨值的差距</p>
       </div>
     </div>
     <div class="topbar-actions">
       <div class="datainfo">
-        <span id="dataDate" class="datainfo-date">載入中…</span>
+        <span id="dataDate" class="datainfo-date" data-en="Loading…">載入中…</span>
         <span id="dataCount" class="datainfo-count"></span>
       </div>
       <button id="langBtn" class="btn btn-icon btn-lang" title="Switch to English">EN</button>
@@ -36,19 +36,23 @@
 <main class="wrap">
 
   <nav class="editions">
-    <span class="editions-label">版本</span>
-    <a href="index.html">計算版</a>
-    <a href="pro.html">專業版</a>
+    <span class="editions-label" data-en="Edition">版本</span>
+    <a href="index.html" data-en="Calculator">計算版</a>
+    <a href="pro.html" data-en="Pro">專業版</a>
     <a href="etf.html" class="current">ETF</a>
-    <a href="us.html">美股</a>
-    <span class="editions-hint">另外三版（計算版、專業版、美股）都是<strong>個股</strong>的估價公式。ETF 是一籃子證券、沒有財報，
+    <a href="us.html" data-en="US">美股</a>
+    <span class="editions-hint i18n-zh">另外三版（計算版、專業版、美股）都是<strong>個股</strong>的估價公式。ETF 是一籃子證券、沒有財報，
       那九種公式有七種完全不適用，所以獨立成這一頁，看的是 ETF 真正該看的指標。</span>
+    <span class="editions-hint i18n-en">The other three editions apply valuation formulas to
+      <strong>individual stocks</strong>. An ETF is a basket of securities with no financial
+      statements, so seven of those nine formulas simply do not apply — hence this separate page,
+      which shows what actually matters for an ETF.</span>
   </nav>
 
   <!-- 為什麼 ETF 不用那些公式 -->
   <details class="card explain etf-why">
-    <summary><h3>為什麼 ETF 不能套用個股的估價公式？</h3></summary>
-    <div class="explain-body">
+    <summary><h3 data-en="Why can&#39;t stock valuation formulas be applied to ETFs?">為什麼 ETF 不能套用個股的估價公式？</h3></summary>
+    <div class="explain-body i18n-zh">
       <p>ETF 是一籃子證券，<strong>沒有財報</strong> —— 沒有每股盈餘、營收、淨利、
          股東權益報酬率，也沒有盈餘成長率。所以個股那九種公式：</p>
       <table class="rules-table etf-fit">
@@ -99,6 +103,67 @@
          以及成分股的集中度。這些資料交易所沒有提供，需要到各投信官網或
          投信投顧公會查詢。</p>
     </div>
+    <div class="explain-body i18n-en">
+      <p>An ETF is a basket of securities and has <strong>no financial statements</strong> — no
+         earnings per share, no revenue, no net income, no return on equity, no earnings growth.
+         So of the nine formulas used for individual stocks:</p>
+      <table class="rules-table etf-fit">
+        <tr><td>P/E (forward and trailing)</td><td class="no">✗ No quarterly filings</td></tr>
+        <tr><td>P/E (trailing)</td><td class="no">✗ The exchange's P/E data covers stocks only</td></tr>
+        <tr><td>PEG ratio</td><td class="no">✗ No earnings growth rate</td></tr>
+        <tr><td>Monthly revenue momentum</td><td class="no">✗ No revenue</td></tr>
+        <tr><td>Graham formula</td><td class="no">✗ Needs EPS</td></tr>
+        <tr><td>Return on equity</td><td class="no">✗ No return on equity</td></tr>
+        <tr><td>Price / sales</td><td class="no">✗ No revenue</td></tr>
+        <tr><td>Price / book</td><td class="partial">△ Computable, but it means something entirely different</td></tr>
+        <tr><td>Dividend method</td><td class="yes">✓ Works for income ETFs</td></tr>
+      </table>
+      <p><strong>That "△" on price-to-book is the important one.</strong> For an individual company,
+         P/B is a valuation measure: 1.2x and 5x say different things about how expensive it is. But
+         an ETF's net asset value simply <em>is</em> the market value of the basket it holds, so in
+         theory <strong>price should always equal NAV</strong>. A deviation is not "cheap" or
+         "expensive" — it is a <strong>premium or discount</strong>, a question of market-making,
+         liquidity and the creation/redemption mechanism. Reading it as a valuation signal misses
+         the point entirely.</p>
+      <h4>Premium / discount</h4>
+      <pre>premium = (market price − NAV) ÷ NAV × 100%</pre>
+      <p>A <strong>premium</strong> (positive) means you are paying more than the assets it actually
+         holds are worth; a <strong>discount</strong> (negative) means the opposite. Normally it sits
+         close to zero, pulled back by authorised participants through creation and redemption. A
+         persistent gap usually shows up where liquidity is thin, where the fund tracks an overseas
+         market in a different time zone, or when sentiment runs hot.</p>
+      <h4>Is a discount the same as cheap?</h4>
+      <p>Arithmetically, yes: a discount means you are buying the same basket for less than NAV, and
+         a premium the reverse. But before treating it as a signal, four things break that
+         intuition:</p>
+      <ol class="etf-caveats">
+        <li><strong>The magnitude is usually tiny.</strong> Most Taiwan-listed ETFs stay within
+            ±1%, pulled back by the creation/redemption mechanism. Against long-run returns, that
+            is rarely the variable that matters.</li>
+        <li><strong>For funds tracking overseas markets, a discount is often a time-zone
+            illusion.</strong> The NAV of a US, Japanese or overseas bond ETF reflects holdings as
+            of <strong>the previous overseas close</strong>, while the Taipei price already reflects
+            the latest overseas futures. When those markets fall hard, this kind of ETF drops first
+            while NAV is still stuck at yesterday — the screen shows a "discount" that is really
+            just a stale NAV, not a markdown. <strong>Bond and cross-border ETFs especially.</strong></li>
+        <li><strong>A discount can be a symptom of poor liquidity.</strong> Thinly traded ETFs have
+            wide bid-ask spreads, and the discount you save may not cover the round-trip spread.</li>
+        <li><strong>Expense ratios usually matter more.</strong> Management and custody fees are
+            deducted year after year; half a percentage point of annual fees compounded over ten
+            years dwarfs a one-time 1% premium.</li>
+      </ol>
+      <p>In other words, the premium is closer to <strong>a way of timing your entry into one
+         particular ETF</strong> — if you are buying it anyway, buying near NAV beats buying at a 2%
+         premium — than <strong>a way of comparing different ETFs</strong>. Comparing across types
+         (bond vs plain-vanilla vs leveraged) is less meaningful still.</p>
+
+      <h4>What else to look at</h4>
+      <p>Not covered on this page but equally important: the <strong>expense ratio</strong>
+         (management plus custody fees — the single biggest variable in long-run returns),
+         <strong>tracking error</strong>, <strong>size and liquidity</strong>, and how concentrated
+         the holdings are. The exchange does not publish these; check each fund manager's site or
+         the SITCA.</p>
+    </div>
   </details>
 
   <!-- 搜尋 -->
@@ -106,12 +171,14 @@
     <div class="search-box">
       <span class="search-ico">🔍</span>
       <input id="q" type="search" autocomplete="off" spellcheck="false"
-             placeholder="輸入 ETF 代號或名稱，例如 0050 或 高股息" aria-label="搜尋 ETF">
-      <button id="clearBtn" class="search-clear" hidden aria-label="清除">✕</button>
+             placeholder="輸入 ETF 代號或名稱，例如 0050 或 高股息" aria-label="搜尋 ETF"
+             data-ph-en="Search by ETF code or name, e.g. 0050"
+             data-aria-en="Search ETFs">
+      <button id="clearBtn" class="search-clear" hidden aria-label="清除" data-aria-en="Clear">✕</button>
     </div>
     <ul id="suggest" class="suggest" hidden></ul>
     <div class="quickpicks">
-      <span class="quickpicks-label">熱門：</span>
+      <span class="quickpicks-label" data-en="Popular:">熱門：</span>
       <button class="chip" data-code="0050">元大台灣50</button>
       <button class="chip" data-code="0056">元大高股息</button>
       <button class="chip" data-code="00878">國泰永續高股息</button>
@@ -121,7 +188,7 @@
     </div>
   </section>
 
-  <div id="loading" class="state-msg">正在載入 ETF 資料…</div>
+  <div id="loading" class="state-msg" data-en="Loading ETF data…">正在載入 ETF 資料…</div>
   <div id="errorBox" class="state-msg state-error" hidden></div>
 
   <!-- 個別 ETF -->
@@ -136,16 +203,16 @@
 
       <div class="etf-prem">
         <div class="etf-prem-main">
-          <span class="label">折溢價率</span>
+          <span class="label" data-en="Premium / discount">折溢價率</span>
           <strong id="ePrem">—</strong>
           <span id="ePremWord" class="etf-prem-word">—</span>
         </div>
         <div class="etf-prem-calc">
-          <div><span>市價</span><b id="ePrice">—</b></div>
+          <div><span data-en="Market price">市價</span><b id="ePrice">—</b></div>
           <div class="op">−</div>
-          <div><span>預估淨值</span><b id="eNav">—</b></div>
+          <div><span data-en="Estimated NAV">預估淨值</span><b id="eNav">—</b></div>
           <div class="op">÷</div>
-          <div><span>淨值</span><b id="eNav2">—</b></div>
+          <div><span data-en="NAV">淨值</span><b id="eNav2">—</b></div>
         </div>
       </div>
 
@@ -156,39 +223,56 @@
   <!-- 全市場分佈 -->
   <section id="board" hidden>
     <div class="card">
-      <h3>全市場折溢價分佈</h3>
-      <p class="rules-sub">共 <b id="bCount">—</b> 檔有淨值資料。折溢價率中位數
-        <b id="bMedian">—</b>，其中溢價超過 1% 有 <b id="bOver">—</b> 檔、
-        折價超過 1% 有 <b id="bUnder">—</b> 檔。</p>
+      <h3 data-en="Market-wide distribution">全市場折溢價分佈</h3>
+      <p id="boardSub" class="rules-sub">—</p>
       <div class="board-grid">
         <div>
-          <h4 class="board-title rich">溢價最高（市價高於淨值）</h4>
+          <h4 class="board-title rich" data-en="Largest premiums (price above NAV)">溢價最高（市價高於淨值）</h4>
           <ol id="topPrem" class="board-list"></ol>
         </div>
         <div>
-          <h4 class="board-title cheap">折價最深（市價低於淨值）</h4>
+          <h4 class="board-title cheap" data-en="Deepest discounts (price below NAV)">折價最深（市價低於淨值）</h4>
           <ol id="topDisc" class="board-list"></ol>
         </div>
       </div>
-      <p class="rules-note">排行僅為當日數值的客觀排序，不代表任何一檔值得或不值得買進。
+      <p class="rules-note i18n-zh">排行僅為當日數值的客觀排序，不代表任何一檔值得或不值得買進。
         折溢價會隨造市與流動性變動，且不同類型（債券、期貨、槓桿反向、連結海外市場者）
         的正常區間本來就不同，跨類型比較意義有限。</p>
+      <p class="rules-note i18n-en">These rankings are an objective sort of today's figures and say
+        nothing about whether any ETF is worth buying. Premiums move with market-making and
+        liquidity, and different types (bond, futures-based, leveraged/inverse, or tracking overseas
+        markets) have different normal ranges, so comparing across types means little.</p>
     </div>
   </section>
 
 </main>
 
 <footer class="foot wrap">
-  <p class="disclaimer">
+  <p class="disclaimer i18n-zh">
     <strong>免責聲明：</strong>本頁顯示的折溢價率，是把交易所公開的收盤價與各投信公布的
     <strong>預估淨值</strong>相減後除以淨值所得，屬於機械式的算術結果，
     <strong>不構成投資建議、分析意見或買賣要約</strong>。
     預估淨值非官方收盤淨值，實際申購贖回價格以各投信公告為準。
     本頁未涵蓋內扣費用、追蹤誤差與成分股風險，這些因素對長期報酬的影響往往大於折溢價。
   </p>
-  <p class="foot-src">
+  <p class="disclaimer i18n-en">
+    <strong>Disclaimer:</strong> The premium/discount shown here is the exchange's published
+    closing price minus the fund manager's <strong>estimated NAV</strong>, divided by that NAV —
+    mechanical arithmetic, and <strong>not investment advice, an analyst opinion, or an offer to
+    buy or sell</strong>. Estimated NAV is not the official closing NAV; actual creation and
+    redemption prices are set by each fund manager. This page does not cover expense ratios,
+    tracking error or constituent risk, all of which usually matter more to long-run returns than
+    the premium does.
+  </p>
+  <p class="foot-src i18n-zh">
     資料來源：臺灣證券交易所即時資訊系統（各投信預估淨值）、證交所與櫃買中心收盤行情。
     盤後更新，非即時報價。本站不保證資料完整與正確，請以各交易所與投信公告為準。
+  </p>
+  <p class="foot-src i18n-en">
+    Sources: Taiwan Stock Exchange real-time information system (fund managers' estimated NAV);
+    closing prices from the TWSE and TPEx. Updated after the close — not real-time quotes. This
+    site does not guarantee the data is complete or correct; refer to the exchanges' and fund
+    managers' own announcements.
   </p>
 </footer>
 

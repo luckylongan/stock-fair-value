@@ -17,17 +17,18 @@
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,20 10,12.5 15.5,17 24.5,6"/><polyline points="19,6 24.5,6 24.5,11.5"/></svg></span>
       <div>
-        <h1>幾塊你要買？</h1>
-        <p class="brand-sub">專業版 · 九種公式整合 · 便宜／合理／昂貴位階</p>
+        <h1 data-en="What&#39;s Your Price?">幾塊你要買？</h1>
+        <p class="brand-sub" data-en="Taiwan stocks · Pro · 9 formulas consolidated · Cheap / fair / expensive">專業版 · 九種公式整合 · 便宜／合理／昂貴位階</p>
       </div>
     </div>
     <div class="topbar-actions">
       <div class="datainfo">
-        <span id="dataDate" class="datainfo-date">載入中…</span>
+        <span id="dataDate" class="datainfo-date" data-en="Loading…">載入中…</span>
         <span id="dataCount" class="datainfo-count"></span>
       </div>
-      <button id="refreshBtn" class="btn btn-ghost" title="直接向證交所 / 櫃買中心抓取最新資料">
-        <span class="btn-ico">⟳</span> 更新資料
+      <button id="refreshBtn" class="btn btn-ghost" title="直接向證交所 / 櫃買中心抓取最新資料"
+              data-title-en="Fetch the latest data directly from the TWSE / TPEx">
+        <span class="btn-ico">⟳</span> <span data-en="Refresh">更新資料</span>
       </button>
       <button id="langBtn" class="btn btn-icon btn-lang" title="Switch to English">EN</button>
       <button id="themeBtn" class="btn btn-icon" title="切換深淺色"
@@ -39,15 +40,21 @@
 <main class="wrap">
 
   <nav class="editions">
-    <span class="editions-label">版本</span>
-    <a href="index.html">計算版</a>
-    <a href="pro.html" class="current">專業版</a>
+    <span class="editions-label" data-en="Edition">版本</span>
+    <a href="index.html" data-en="Calculator">計算版</a>
+    <a href="pro.html" class="current" data-en="Pro">專業版</a>
     <a href="etf.html">ETF</a>
-    <a href="us.html">美股</a>
-    <span class="editions-hint">目前是<strong>專業版</strong>：把九種公式整合成便宜／合理／昂貴三個價位，
+    <a href="us.html" data-en="US">美股</a>
+    <span class="editions-hint i18n-zh">目前是<strong>專業版</strong>：把九種公式整合成便宜／合理／昂貴三個價位，
       並依固定規則判定現價位階與進場條件。判定規則寫死在畫面上、門檻隨你的參數變動，
       <strong>不預測股價，也不構成投資建議</strong>。
       <strong>美股</strong>版是同一套公式套在美國市場，資料改由 SEC 與那斯達克取得。</span>
+    <span class="editions-hint i18n-en">This is the <strong>Pro</strong> edition: it consolidates the
+      nine formulas into cheap / fair / expensive prices and applies a fixed rule to say where the
+      current price sits. The rule is spelled out on screen and its thresholds move with your
+      assumptions. <strong>It does not predict prices and is not investment advice.</strong>
+      The <strong>US</strong> edition applies the same formulas to the US market, with data from the
+      SEC and Nasdaq.</span>
   </nav>
 
   <!-- 搜尋 -->
@@ -55,22 +62,24 @@
     <div class="search-box">
       <span class="search-ico">🔍</span>
       <input id="q" type="search" autocomplete="off" spellcheck="false"
-             placeholder="輸入股票代號或名稱，例如 2330 或 台積電" aria-label="搜尋股票">
-      <button id="clearBtn" class="search-clear" hidden aria-label="清除">✕</button>
+             placeholder="輸入股票代號或名稱，例如 2330 或 台積電" aria-label="搜尋股票"
+             data-ph-en="Search by ticker or company name, e.g. 2330 or TSMC"
+             data-aria-en="Search Taiwan stocks">
+      <button id="clearBtn" class="search-clear" hidden aria-label="清除" data-aria-en="Clear">✕</button>
     </div>
     <ul id="suggest" class="suggest" hidden></ul>
     <div class="quickpicks">
-      <span class="quickpicks-label">熱門：</span>
-      <button class="chip" data-code="2330">台積電</button>
-      <button class="chip" data-code="2317">鴻海</button>
-      <button class="chip" data-code="2412">中華電</button>
-      <button class="chip" data-code="2882">國泰金</button>
-      <button class="chip" data-code="1216">統一</button>
-      <button class="chip" data-code="2603">長榮</button>
+      <span class="quickpicks-label" data-en="Popular:">熱門：</span>
+      <button class="chip" data-code="2330" data-en="TSMC">台積電</button>
+      <button class="chip" data-code="2317" data-en="Hon Hai">鴻海</button>
+      <button class="chip" data-code="2412" data-en="Chunghwa Telecom">中華電</button>
+      <button class="chip" data-code="2882" data-en="Cathay FHC">國泰金</button>
+      <button class="chip" data-code="1216" data-en="Uni-President">統一</button>
+      <button class="chip" data-code="2603" data-en="Evergreen Marine">長榮</button>
     </div>
   </section>
 
-  <div id="loading" class="state-msg">正在載入股價資料…</div>
+  <div id="loading" class="state-msg" data-en="Loading price data…">正在載入股價資料…</div>
   <div id="errorBox" class="state-msg state-error" hidden></div>
 
   <!-- 結果 -->
@@ -84,19 +93,19 @@
         <span id="sDate" class="tag tag-quiet">—</span>
       </div>
       <div class="stock-price">
-        <span class="label">收盤價</span>
+        <span class="label" data-en="Close">收盤價</span>
         <strong id="sPrice">—</strong>
-        <span class="unit">元</span>
+        <span class="unit" data-en="NT$">元</span>
       </div>
       <dl class="fundamentals">
-        <div><dt>EPS<small>近四季</small></dt><dd id="sEps">—</dd></div>
-        <div><dt>每股淨值<small>最近一季</small></dt><dd id="sBvps">—</dd></div>
-        <div><dt>ROE<small>近四季</small></dt><dd id="sRoe">—</dd></div>
-        <div><dt>現金股利<small>近一年</small></dt><dd id="sDps">—</dd></div>
-        <div><dt>本益比<small>目前</small></dt><dd id="sPe">—</dd></div>
-        <div><dt>股價淨值比<small>目前</small></dt><dd id="sPb">—</dd></div>
-        <div><dt>現金殖利率<small>目前</small></dt><dd id="sY">—</dd></div>
-        <div><dt>財報基準<small>—</small></dt><dd id="sFq">—</dd></div>
+        <div><dt data-en="EPS<small>TTM</small>">EPS<small>近四季</small></dt><dd id="sEps">—</dd></div>
+        <div><dt data-en="Book value / share<small>latest quarter</small>">每股淨值<small>最近一季</small></dt><dd id="sBvps">—</dd></div>
+        <div><dt data-en="ROE<small>TTM</small>">ROE<small>近四季</small></dt><dd id="sRoe">—</dd></div>
+        <div><dt data-en="Dividend / share<small>past year</small>">現金股利<small>近一年</small></dt><dd id="sDps">—</dd></div>
+        <div><dt data-en="P/E<small>current</small>">本益比<small>目前</small></dt><dd id="sPe">—</dd></div>
+        <div><dt data-en="P/B<small>current</small>">股價淨值比<small>目前</small></dt><dd id="sPb">—</dd></div>
+        <div><dt data-en="Dividend yield<small>current</small>">現金殖利率<small>目前</small></dt><dd id="sY">—</dd></div>
+        <div><dt data-en="Fiscal period<small>—</small>">財報基準<small>—</small></dt><dd id="sFq">—</dd></div>
       </dl>
       <div id="dilutionNote" class="dilution-note" hidden></div>
     </div>
@@ -104,14 +113,17 @@
     <!-- 綜合結論 -->
     <div class="card summary">
       <div class="summary-head">
-        <h3>綜合位階</h3>
-        <p class="summary-sub">取下方各公式三欄的<strong>中位數</strong>，整合成三個價位，
+        <h3 data-en="Consolidated position">綜合位階</h3>
+        <p class="summary-sub i18n-zh">取下方各公式三欄的<strong>中位數</strong>，整合成三個價位，
           再看現價落在哪一段。勾選卡片可調整納入哪些公式。</p>
+        <p class="summary-sub i18n-en">Takes the <strong>median</strong> of each column across the
+          formulas below to form three prices, then shows which band the current price falls in.
+          Use the checkboxes to choose which formulas count.</p>
       </div>
       <div class="summary-grid">
-        <div class="sum-cell lo"><span class="sum-label">便宜價</span><strong id="tCheap">—</strong></div>
-        <div class="sum-cell mid"><span class="sum-label">合理價</span><strong id="tFair">—</strong></div>
-        <div class="sum-cell hi"><span class="sum-label">昂貴價</span><strong id="tRich">—</strong></div>
+        <div class="sum-cell lo"><span class="sum-label" data-en="Cheap">便宜價</span><strong id="tCheap">—</strong></div>
+        <div class="sum-cell mid"><span class="sum-label" data-en="Fair">合理價</span><strong id="tFair">—</strong></div>
+        <div class="sum-cell hi"><span class="sum-label" data-en="Expensive">昂貴價</span><strong id="tRich">—</strong></div>
       </div>
       <div class="gauge">
         <div class="gauge-track">
@@ -119,7 +131,7 @@
           <div class="gauge-seg seg-fair"></div>
           <div class="gauge-seg seg-rich"></div>
           <div id="gaugeMark" class="gauge-mark" style="left:50%">
-            <span class="gauge-bubble">現價 <b id="gaugePrice">—</b></span>
+            <span class="gauge-bubble"><span data-en="Price">現價</span> <b id="gaugePrice">—</b></span>
           </div>
         </div>
         <div class="gauge-scale">
@@ -134,18 +146,31 @@
 
     <!-- 進場規則 -->
     <div class="card rules">
-      <h3>進場條件怎麼判定？</h3>
-      <p class="rules-sub">這是一條寫死的比較規則，不是預測。門檻就是上方三個價位，
+      <h3 data-en="How is the entry condition decided?">進場條件怎麼判定？</h3>
+      <p class="rules-sub i18n-zh">這是一條寫死的比較規則，不是預測。門檻就是上方三個價位，
         改「計算參數」就會跟著變。</p>
-      <table class="rules-table">
+      <p class="rules-sub i18n-en">This is a hard-coded comparison rule, not a forecast. The
+        thresholds are simply the three prices above, and they move when you change the assumptions.</p>
+      <table class="rules-table i18n-zh">
         <tr><td><span class="dot dot-cheap"></span>現價 &lt; 便宜價</td><td><b>進場區</b>　符合進場條件</td></tr>
         <tr><td><span class="dot dot-nearby"></span>便宜價 ≤ 現價 &lt; 合理價</td><td><b>接近進場</b>　顯示距便宜價還差多少</td></tr>
         <tr><td><span class="dot dot-fair"></span>合理價 ≤ 現價 &lt; 昂貴價</td><td><b>偏高</b></td></tr>
         <tr><td><span class="dot dot-rich"></span>現價 ≥ 昂貴價</td><td><b>過熱</b></td></tr>
       </table>
-      <p class="rules-note">位階只反映「現價與公式輸出的相對關係」，不含產業前景、
+      <table class="rules-table i18n-en">
+        <tr><td><span class="dot dot-cheap"></span>price &lt; cheap</td><td><b>Entry zone</b>　meets the entry condition</td></tr>
+        <tr><td><span class="dot dot-nearby"></span>cheap ≤ price &lt; fair</td><td><b>Approaching entry</b>　shows how far off the cheap price it is</td></tr>
+        <tr><td><span class="dot dot-fair"></span>fair ≤ price &lt; expensive</td><td><b>On the high side</b></td></tr>
+        <tr><td><span class="dot dot-rich"></span>price ≥ expensive</td><td><b>Overheated</b></td></tr>
+      </table>
+      <p class="rules-note i18n-zh">位階只反映「現價與公式輸出的相對關係」，不含產業前景、
         一次性損益、公司治理、總體環境與你的個人財務狀況。符合進場條件不等於值得買，
         不符合也不等於該賣。</p>
+      <p class="rules-note i18n-en">The position reflects only how the current price relates to the
+        formulas' output. It says nothing about industry outlook, one-off gains and losses,
+        corporate governance, the macro environment, or your own finances. Meeting the entry
+        condition does not mean a stock is worth buying, and failing it does not mean you should
+        sell.</p>
     </div>
 
     <!-- 計算公式 -->
@@ -153,125 +178,158 @@
 
     <!-- 參數 -->
     <details class="card params">
-      <summary><h3>計算參數</h3><span class="params-hint">所有假設都由你設定，改動會立即重算</span></summary>
+      <summary><h3 data-en="Assumptions">計算參數</h3><span class="params-hint" data-en="Every assumption is yours; changes recalculate immediately">所有假設都由你設定，改動會立即重算</span></summary>
       <div class="params-body">
 
         <div class="param-group">
-          <h4>資料基準</h4>
+          <h4 data-en="Basis for the multiples">資料基準</h4>
           <label class="switch-row">
             <input type="checkbox" id="pUseBands" checked>
-            <span>優先使用「該股自身的歷史評價區間」（近 5 年 P20 / P50 / P80）</span>
+            <span data-en="Prefer this stock&#39;s own historical range (5-year P20 / P50 / P80)">優先使用「該股自身的歷史評價區間」（近 5 年 P20 / P50 / P80）</span>
           </label>
-          <p class="param-note">
+          <p class="param-note i18n-zh">
             這是該股自身過去 5 年實際交易出來的統計分位數，屬客觀歷史紀錄。
             關閉後，本益比類、股價淨值比法、股利法一律改用下方你自訂的固定倍數
             （股價營收比本來就只吃自訂倍數）。上櫃股票因來源未提供歷史資料，一律使用自訂倍數。
           </p>
+          <p class="param-note i18n-en">
+            These are percentiles of how this stock actually traded over the past five years — an
+            objective historical record. Turn it off and the P/E family, price-to-book and dividend
+            methods all switch to the fixed multiples you set below (price-to-sales only ever uses
+            your own multiples). TPEx-listed stocks have no historical data from the source, so they
+            always use the fixed multiples.
+          </p>
         </div>
 
         <div class="param-group">
-          <h4>自訂每股盈餘（EPS）</h4>
+          <h4 data-en="Your own EPS estimate">自訂每股盈餘（EPS）</h4>
           <div class="param-row">
-            <label>預估年度 EPS
+            <label><span data-en="Estimated annual EPS">預估年度 EPS</span>
               <input type="number" id="pCustomEps" value="" min="0" max="9999" step="0.01"
-                     placeholder="留空 = 自動"> 元</label>
+                     placeholder="留空 = 自動" data-ph-en="blank = automatic">
+              <span data-en="NT$">元</span></label>
           </div>
-          <p class="param-note">
+          <p class="param-note i18n-zh">
             填入數字後，所有以「預估 EPS」為基礎的公式（年化本益比、月營收動能、
             本益成長比、葛拉漢公式）一律改用你輸入的值，卡片會標示「你輸入的 EPS」。
             留空則沿用本站依季報與月營收算出的數字。
           </p>
+          <p class="param-note i18n-en">
+            Enter a number and every formula built on an estimated EPS (forward P/E, monthly revenue
+            momentum, PEG, Graham) switches to your figure, and the card says so. Leave it blank to
+            keep the value derived from quarterly filings and monthly revenue.
+          </p>
         </div>
 
         <div class="param-group">
-          <h4>本益比倍數（無歷史資料時，年化版與近四季版共用）</h4>
+          <h4 data-en="P/E multiples (when no history is available; shared by the forward and trailing versions)">本益比倍數（無歷史資料時，年化版與近四季版共用）</h4>
           <div class="param-row">
-            <label>低 <input type="number" id="pPeLo" value="10" min="1" max="100" step="0.5"> 倍</label>
-            <label>中 <input type="number" id="pPeMid" value="15" min="1" max="100" step="0.5"> 倍</label>
-            <label>高 <input type="number" id="pPeHi" value="20" min="1" max="100" step="0.5"> 倍</label>
+            <label><span data-en="Low">低</span> <input type="number" id="pPeLo" value="10" min="1" max="100" step="0.5"> <span data-en="x">倍</span></label>
+            <label><span data-en="Mid">中</span> <input type="number" id="pPeMid" value="15" min="1" max="100" step="0.5"> <span data-en="x">倍</span></label>
+            <label><span data-en="High">高</span> <input type="number" id="pPeHi" value="20" min="1" max="100" step="0.5"> <span data-en="x">倍</span></label>
           </div>
         </div>
 
         <div class="param-group">
-          <h4>股價淨值比倍數（無歷史資料時）</h4>
+          <h4 data-en="P/B multiples (when no history is available)">股價淨值比倍數（無歷史資料時）</h4>
           <div class="param-row">
-            <label>低 <input type="number" id="pPbLo" value="0.8" min="0.1" max="20" step="0.1"> 倍</label>
-            <label>中 <input type="number" id="pPbMid" value="1.2" min="0.1" max="20" step="0.1"> 倍</label>
-            <label>高 <input type="number" id="pPbHi" value="1.8" min="0.1" max="20" step="0.1"> 倍</label>
+            <label><span data-en="Low">低</span> <input type="number" id="pPbLo" value="0.8" min="0.1" max="20" step="0.1"> <span data-en="x">倍</span></label>
+            <label><span data-en="Mid">中</span> <input type="number" id="pPbMid" value="1.2" min="0.1" max="20" step="0.1"> <span data-en="x">倍</span></label>
+            <label><span data-en="High">高</span> <input type="number" id="pPbHi" value="1.8" min="0.1" max="20" step="0.1"> <span data-en="x">倍</span></label>
           </div>
         </div>
 
         <div class="param-group">
-          <h4>目標現金殖利率（無歷史資料時）</h4>
+          <h4 data-en="Target dividend yield (when no history is available)">目標現金殖利率（無歷史資料時）</h4>
           <div class="param-row">
-            <label>高 <input type="number" id="pYHi" value="6.25" min="0.1" max="30" step="0.05"> %</label>
-            <label>中 <input type="number" id="pYMid" value="5" min="0.1" max="30" step="0.05"> %</label>
-            <label>低 <input type="number" id="pYLo" value="3.125" min="0.1" max="30" step="0.05"> %</label>
+            <label><span data-en="High">高</span> <input type="number" id="pYHi" value="6.25" min="0.1" max="30" step="0.05"> %</label>
+            <label><span data-en="Mid">中</span> <input type="number" id="pYMid" value="5" min="0.1" max="30" step="0.05"> %</label>
+            <label><span data-en="Low">低</span> <input type="number" id="pYLo" value="3.125" min="0.1" max="30" step="0.05"> %</label>
           </div>
-          <p class="param-note">
+          <p class="param-note i18n-zh">
             殖利率與價格成反比，殖利率設得越高、算出的對應價越低。
             預設值 6.25 / 5 / 3.125% 即「現金股利 × 16 / 20 / 32 倍」的換算。
           </p>
-        </div>
-
-        <div class="param-group">
-          <h4>股價營收比倍數（P/S）</h4>
-          <div class="param-row">
-            <label>低 <input type="number" id="pPsLo" value="0.6" min="0.05" max="30" step="0.1"> 倍</label>
-            <label>中 <input type="number" id="pPsMid" value="1.2" min="0.05" max="30" step="0.1"> 倍</label>
-            <label>高 <input type="number" id="pPsHi" value="2.5" min="0.05" max="30" step="0.1"> 倍</label>
-          </div>
-          <p class="param-note">
-            合理倍數因產業差異極大 —— 軟體與 IC 設計常在 5~10 倍，
-            通路與代工可能低於 0.5 倍。務必依同業水準調整。
+          <p class="param-note i18n-en">
+            Yield moves inversely to price: the higher the target yield, the lower the resulting
+            price. The defaults of 6.25 / 5 / 3.125% are the same thing as 16 / 20 / 32 times the
+            dividend.
           </p>
         </div>
 
         <div class="param-group">
-          <h4>本益成長比（PEG）</h4>
+          <h4 data-en="P/S multiples">股價營收比倍數（P/S）</h4>
           <div class="param-row">
-            <label>低 PEG <input type="number" id="pPegLo" value="0.75" min="0.1" max="5" step="0.05"></label>
-            <label>中 PEG <input type="number" id="pPegMid" value="1" min="0.1" max="5" step="0.05"></label>
-            <label>高 PEG <input type="number" id="pPegHi" value="1.5" min="0.1" max="5" step="0.05"></label>
-            <label>成長率上限 <input type="number" id="pGCap" value="40" min="5" max="200" step="5"> %</label>
+            <label><span data-en="Low">低</span> <input type="number" id="pPsLo" value="0.6" min="0.05" max="30" step="0.1"> <span data-en="x">倍</span></label>
+            <label><span data-en="Mid">中</span> <input type="number" id="pPsMid" value="1.2" min="0.05" max="30" step="0.1"> <span data-en="x">倍</span></label>
+            <label><span data-en="High">高</span> <input type="number" id="pPsHi" value="2.5" min="0.05" max="30" step="0.1"> <span data-en="x">倍</span></label>
           </div>
-          <p class="param-note">
+          <p class="param-note i18n-zh">
+            合理倍數因產業差異極大 —— 軟體與 IC 設計常在 5~10 倍，
+            通路與代工可能低於 0.5 倍。務必依同業水準調整。
+          </p>
+          <p class="param-note i18n-en">
+            Reasonable multiples vary enormously by industry — software and IC design often run
+            5–10x, distribution and contract manufacturing can be below 0.5x. Always adjust to the
+            peer group.
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4 data-en="PEG ratio">本益成長比（PEG）</h4>
+          <div class="param-row">
+            <label><span data-en="Low PEG">低 PEG</span> <input type="number" id="pPegLo" value="0.75" min="0.1" max="5" step="0.05"></label>
+            <label><span data-en="Mid PEG">中 PEG</span> <input type="number" id="pPegMid" value="1" min="0.1" max="5" step="0.05"></label>
+            <label><span data-en="High PEG">高 PEG</span> <input type="number" id="pPegHi" value="1.5" min="0.1" max="5" step="0.05"></label>
+            <label><span data-en="Growth cap">成長率上限</span> <input type="number" id="pGCap" value="40" min="5" max="200" step="5"> %</label>
+          </div>
+          <p class="param-note i18n-zh">
             PEG = 本益比 ÷ 盈餘成長率。文獻上常以 1 作為對照基準，這裡的三組值
             由你自行設定。成長率上限用來避免基期過低（例如去年只賺 0.1 元）
             算出極端的倍數。
           </p>
-        </div>
-
-        <div class="param-group">
-          <h4>葛拉漢公式　V = EPS × (8.5 + 2g)</h4>
-          <div class="param-row">
-            <label>成長率 g <input type="number" id="pGrahamG" value="5" min="-4" max="50" step="0.5"> %</label>
-            <label>敏感度 ± <input type="number" id="pGrahamSpan" value="2" min="0" max="20" step="0.5"> %</label>
-          </div>
-          <p class="param-note">
-            8.5 是葛拉漢 1962 年提出的「零成長公司」基準本益比。g 由你自行判斷輸入，
-            本站不替任何個股預設成長率；敏感度用來同時看 g ± 若干百分點的結果。
+          <p class="param-note i18n-en">
+            PEG = P/E ÷ earnings growth rate (%). The literature often uses 1 as a reference point;
+            the three values here are yours to set. The growth cap keeps a very low prior-year base
+            (last year earning NT$0.10, say) from producing an absurd multiple.
           </p>
         </div>
 
         <div class="param-group">
-          <h4>ROE 法</h4>
+          <h4 data-en="Graham formula　V = EPS × (8.5 + 2g)">葛拉漢公式　V = EPS × (8.5 + 2g)</h4>
           <div class="param-row">
-            <label>要求報酬率 r <input type="number" id="pR" value="8" min="1" max="40" step="0.5"> %</label>
-            <label>永續成長率 g <input type="number" id="pG" value="2" min="0" max="15" step="0.5"> %</label>
-            <label>安全邊際 <input type="number" id="pMos" value="25" min="0" max="60" step="5"> %</label>
+            <label><span data-en="Growth rate g">成長率 g</span> <input type="number" id="pGrahamG" value="5" min="-4" max="50" step="0.5"> %</label>
+            <label><span data-en="Sensitivity ±">敏感度 ±</span> <input type="number" id="pGrahamSpan" value="2" min="0" max="20" step="0.5"> %</label>
           </div>
-          <p class="param-note">g 必須小於 r，否則模型無解。</p>
+          <p class="param-note i18n-zh">
+            8.5 是葛拉漢 1962 年提出的「零成長公司」基準本益比。g 由你自行判斷輸入，
+            本站不替任何個股預設成長率；敏感度用來同時看 g ± 若干百分點的結果。
+          </p>
+          <p class="param-note i18n-en">
+            8.5 is the base P/E Graham observed for a no-growth company in 1962. You supply g —
+            this site never presets a growth rate for any stock. The sensitivity setting shows
+            g ± a few percentage points side by side.
+          </p>
         </div>
 
-        <button id="resetParams" class="btn btn-ghost btn-sm">還原預設值</button>
+        <div class="param-group">
+          <h4 data-en="Return on equity method">ROE 法</h4>
+          <div class="param-row">
+            <label><span data-en="Required return r">要求報酬率 r</span> <input type="number" id="pR" value="8" min="1" max="40" step="0.5"> %</label>
+            <label><span data-en="Perpetual growth g">永續成長率 g</span> <input type="number" id="pG" value="2" min="0" max="15" step="0.5"> %</label>
+            <label><span data-en="Margin of safety">安全邊際</span> <input type="number" id="pMos" value="25" min="0" max="60" step="5"> %</label>
+          </div>
+          <p class="param-note" data-en="g must be less than r, otherwise the model has no solution.">g 必須小於 r，否則模型無解。</p>
+        </div>
+
+        <button id="resetParams" class="btn btn-ghost btn-sm" data-en="Reset to defaults">還原預設值</button>
       </div>
     </details>
 
     <!-- 方法說明 -->
     <details class="card explain">
-      <summary><h3>九種公式怎麼算？</h3></summary>
-      <div class="explain-body">
+      <summary><h3 data-en="How do the nine formulas work?">九種公式怎麼算？</h3></summary>
+      <div class="explain-body i18n-zh">
         <h4>1. 本益比法 —— 年化 EPS（Forward P/E）</h4>
         <p>交易所的本益比是用<strong>近四季 EPS</strong> 算的，反映過去一整年；
            獲利正在成長或衰退的公司，近四季會落後於現況。這個方法改用最新一期
@@ -375,20 +433,154 @@
 ROE  = EPS ÷ 每股淨值 = 股價淨值比 ÷ 本益比
 現金股利 = 收盤價 × 現金殖利率</pre>
       </div>
+      <div class="explain-body i18n-en">
+        <h4>1. P/E method — annualized EPS (Forward P/E)</h4>
+        <p>The exchange's P/E is computed from <strong>trailing twelve-month EPS</strong>, which
+           reflects the past year; for a company whose earnings are growing or shrinking, that lags
+           reality. This method instead takes the year-to-date cumulative EPS from the latest
+           quarterly filing and annualizes it:</p>
+        <pre>annualized EPS = year-to-date EPS ÷ quarter number × 4
+price = annualized EPS × your P/E multiple</pre>
+        <p>Q1 ×4, Q2 ×2, Q3 ×4/3, Q4 is the full year. <strong>The fewer the quarters, the more
+           extrapolation</strong>, so companies with pronounced seasonality or one-off items are
+           easily distorted — the card says how many quarters were used. As with the trailing
+           version below, the multiple defaults to this stock's own 5-year range.</p>
+        <p>Companies file on different schedules, so <strong>the quarter used differs by
+           stock</strong> — the card label says <code>annualized · 115Q2</code> or
+           <code>annualized · 115Q1</code> so you can see at a glance which filing the estimate
+           rests on. Stocks that have filed the latest quarter use it; those that have not fall
+           back to the previous quarter, so there is always a number.</p>
+        <p>Incidentally, the exchange publishes no P/E for companies that lost money over the
+           trailing four quarters, so the trailing method below reports that it does not apply —
+           but if the company has turned profitable this year, this annualized method still works.</p>
+
+        <h4>2. P/E method — trailing twelve months (Trailing P/E)</h4>
+        <pre>price = TTM EPS × your P/E multiple</pre>
+        <p>The most direct method; the multiple again defaults to this stock's own 5-year range.
+           It does not apply to loss-making companies (negative EPS or no published P/E), and
+           companies with volatile earnings are easily distorted.</p>
+
+        <h4>3. PEG ratio</h4>
+        <p>The blind spot of the P/E method is that it ignores growth entirely — at the same 20x
+           P/E, a company growing 5% a year and one growing 30% are worth wildly different amounts.
+           PEG puts growth in the denominator:</p>
+        <pre>PEG   = P/E ÷ earnings growth rate (%)
+price = estimated EPS this year × growth rate (%) × your target PEG</pre>
+        <p>The literature often uses PEG = 1 as a reference point; the three target values are
+           yours to set. Growth is taken as "estimated EPS this year ÷ last year's full-year EPS
+           − 1", with a cap (40% by default) so that a very low prior-year base cannot produce an
+           absurd target P/E. <strong>It does not apply when last year was a loss or this year is
+           shrinking</strong>, and cyclicals are easily overvalued at the peak.</p>
+
+        <h4>4. Monthly revenue momentum</h4>
+        <p>Taiwan requires listed companies to publish the previous month's revenue by the 10th,
+           making it the <strong>most timely</strong> fundamental data available — about 35 days
+           ahead of the quarterly report, which is due 45 days after quarter-end. When earnings
+           momentum turns, monthly revenue shows it first.</p>
+        <pre>estimated annual revenue = year-to-date revenue ÷ months elapsed × 12
+estimated annual EPS     = estimated annual revenue × (cumulative EPS ÷ cumulative revenue)
+price                    = estimated annual EPS × your P/E multiple</pre>
+        <p>The term in brackets is "how much EPS each dollar of revenue contributes", derived from
+           the quarterly filing — so there is no need to look up the share count, and it
+           automatically absorbs the average tax rate and non-operating items.
+           <strong>It assumes the net margin stays stable</strong>, so companies whose gross margin
+           swings will be off. Financial and insurance companies have no comparable revenue concept
+           and are excluded.</p>
+
+        <h4>5. Graham formula</h4>
+        <p>The simplified formula from the revised edition of Graham's <em>The Intelligent
+           Investor</em>:</p>
+        <pre>V = EPS × (8.5 + 2g)</pre>
+        <p><strong>8.5</strong> is the base P/E Graham observed for a no-growth company in 1962;
+           <strong>g</strong> is the expected annual growth rate (%).</p>
+        <p>This site <strong>never presets g for any stock</strong> — you enter it under
+           "Assumptions", and the card lists g ± your sensitivity setting so you can see directly
+           how much the assumption moves the answer. EPS defaults to the estimate derived from
+           quarterly filings and monthly revenue; you can override it with your own figure.</p>
+        <p>Worth noting: this is an empirical formula from the 1960s that ignores the interest-rate
+           environment (the original also has a version adjusted by AAA corporate bond yields) and
+           produces very high multiples for high-growth companies. Judge its applicability yourself.</p>
+
+        <h4>6. Return on equity method</h4>
+        <p>Uses how efficiently a company earns for its shareholders to infer what its book value
+           should be worth. Derived from the Gordon growth model:</p>
+        <pre>fair P/B = (ROE − g) ÷ (r − g)
+price    = book value per share × the model's P/B</pre>
+        <p>r is your required annual return and g your assumed long-run growth rate; both are your
+           inputs. When ROE exceeds r the model returns a multiple above book value, and below r
+           the reverse; the bounds then follow from your margin of safety.
+           <strong>ROE must exceed g</strong> for this to mean anything.</p>
+
+        <h4>7. Price / book (P/B Ratio)</h4>
+        <pre>price = book value per share × your P/B multiple</pre>
+        <p>The multiple defaults to this stock's own 5-year P20 / P50 / P80. Suited to asset-heavy
+           companies and those with volatile earnings (financials, construction, cyclicals),
+           because book value is steadier than earnings.</p>
+
+        <h4>8. Price / sales (P/S Ratio)</h4>
+        <p>Revenue is <strong>always positive</strong>, so companies not yet profitable can still
+           be valued — a group none of the earnings-based methods above can handle.</p>
+        <pre>revenue per share = estimated annual revenue × (quarterly EPS ÷ quarterly net income)
+price             = revenue per share × your P/S multiple</pre>
+        <p>The term in brackets equals 1 ÷ share count (when loss-making, numerator and denominator
+           share a sign, so it stays positive), which is why the share count never has to be looked
+           up.</p>
+        <p><strong>Excluded from the summary by default.</strong> Reasonable multiples vary
+           enormously by industry — software and IC design often run 5–10x, distribution and
+           contract manufacturing can be below 0.5x — and there is no universal default. Adjust the
+           assumptions to the peer level first, then tick it in. It also ignores profitability
+           entirely, so a company with high revenue and years of losses will be overvalued; always
+           read it alongside the other methods.</p>
+
+        <h4>9. Dividend method (discounted cash dividend)</h4>
+        <pre>price = dividend per share ÷ your target yield</pre>
+        <p>Yield moves inversely to price, so the highest target yield gives the lowest price. The
+           classic approach is 16x the dividend (6.25%), 20x (5%) and 32x (3.125%). Suited to mature
+           companies with stable payouts; it does not apply to companies that pay nothing or pay
+           erratically.</p>
+
+        <h4>Adjusting for stock-dividend dilution</h4>
+        <p>When a company pays a <strong>stock dividend</strong> the share count grows, so EPS and
+           book value per share should be diluted in step. But on the ex-dividend date the exchange
+           divides the <strong>already-diluted price</strong> by EPS that has
+           <strong>not</strong> been restated for the new share count — testing Twinhead, Hwayu and
+           Fartek, P/E and P/B all gapped 20–30% along with the price on the ex-date while EPS did
+           not move at all.</p>
+        <p>Taken at face value, the EPS and book value this site derives would be too high,
+           inflating the prices from the P/E, P/B and ROE methods alike. So whenever an ex-dividend
+           date falls after the end of the reference fiscal quarter, this site divides EPS and book
+           value per share by (1 + stock dividend ratio) to restore them, and flags it on the stock
+           card. ROE is a ratio of the two and is unaffected.</p>
+        <p><strong>Two known limits:</strong> for a combined stock-and-cash dividend on the same
+           day, public data cannot separate the stock ratio from the cash portion, so this site
+           flags it without correcting; and the historical valuation ranges carry the same
+           stock-dividend discontinuities, so for frequent payers the "5-year range" runs slightly
+           wider than reality.</p>
+
+        <h4>Where the numbers come from</h4>
+        <p>The TWSE and TPEx publish each stock's closing price, P/E, P/B and dividend yield daily,
+           and this site derives the rest from those:</p>
+        <pre>EPS                  = close ÷ P/E
+book value per share = close ÷ P/B
+ROE                  = EPS ÷ book value per share = P/B ÷ P/E
+dividend per share   = close × dividend yield</pre>
+      </div>
     </details>
 
   </section>
 
   <section id="empty" class="empty">
     <p class="empty-ico">📊</p>
-    <p>輸入股票代號或名稱開始估價</p>
-    <p class="empty-sub">收錄上市與上櫃普通股，資料來自臺灣證券交易所與證券櫃檯買賣中心</p>
+    <p data-en="Enter a ticker or company name to start">輸入股票代號或名稱開始估價</p>
+    <p class="empty-sub i18n-zh">收錄上市與上櫃普通股，資料來自臺灣證券交易所與證券櫃檯買賣中心</p>
+    <p class="empty-sub i18n-en">Covers common stocks listed on the TWSE and TPEx, with data from
+      the Taiwan Stock Exchange and the Taipei Exchange.</p>
   </section>
 
 </main>
 
 <footer class="foot wrap">
-  <p class="disclaimer">
+  <p class="disclaimer i18n-zh">
     <strong>免責聲明：</strong>本頁的「便宜／合理／昂貴」與位階判定，是把公開財務數字
     代入公開財務公式後，依<strong>畫面上寫明的固定規則</strong>做機械式比較的結果，
     <strong>不是對個股價值的判斷，也不是投資建議、分析意見或買賣要約</strong>。
@@ -398,9 +590,28 @@ ROE  = EPS ÷ 每股淨值 = 股價淨值比 ÷ 本益比
     總體環境等因素，計算結果與實際價值可能有重大差異。任何買賣決策應自行評估風險承受度
     並諮詢合格專業人士。使用者應自行查證原始資料並自負決策責任。
   </p>
-  <p class="foot-src">
+  <p class="disclaimer i18n-en">
+    <strong>Disclaimer:</strong> The "cheap / fair / expensive" prices and the position reading on
+    this page are the result of feeding public financial figures into public financial formulas and
+    comparing them mechanically against <strong>the fixed rule stated on screen</strong>. They are
+    <strong>not a judgement about any stock's value, and not investment advice, an analyst opinion,
+    or an offer to buy or sell</strong>. Every multiple and assumption is set by you, and changing
+    them changes the conclusion. This site holds no securities investment consulting licence and
+    neither recommends securities nor manages accounts. The formulas are standard finance-textbook
+    material; their assumptions and limits cannot capture industry outlook, one-off gains and
+    losses, corporate governance or the macro environment, so the results may differ materially
+    from actual value. Assess your own risk tolerance and consult a qualified professional before
+    any trading decision. Verify the underlying data yourself and take responsibility for your own
+    decisions.
+  </p>
+  <p class="foot-src i18n-zh">
     資料來源：臺灣證券交易所、證券櫃檯買賣中心、公開資訊觀測站之公開資料。
     盤後更新，非即時報價。本站不保證資料完整與正確，請以各交易所公告為準。
+  </p>
+  <p class="foot-src i18n-en">
+    Sources: public data from the Taiwan Stock Exchange, the Taipei Exchange and the Market
+    Observation Post System. Updated after the close — not real-time quotes. This site does not
+    guarantee the data is complete or correct; refer to the exchanges' own announcements.
   </p>
 </footer>
 

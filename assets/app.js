@@ -57,6 +57,14 @@
    "refreshBtn", "themeBtn", "resetParams", "pUseBands"].forEach((k) => (el[k] = $(k)));
 
   // ── 小工具 ──────────────────────────────────────────────
+  // 帶變數的訊息沒辦法像 HTML 那樣把中英兩份都寫死靠 CSS 切，
+  // 每則寫成一個函式，兩種語言各一份，由 M() 依目前語言取用。
+  const L = () => (window.I18N ? window.I18N.lang : "zh");
+  const M = () => MSG[L()] || MSG.zh;
+  const pick = (zh, en) => (L() === "en" ? en : zh);
+  const X = () => pick(" 倍", "x");          // 倍數單位
+  const nt = (v, d = 2) => pick(fmt(v, d) + " 元", "NT$" + fmt(v, d));
+
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const fmt = (v, d = 2) =>
     (v === null || v === undefined || !isFinite(v)) ? "—"
@@ -65,6 +73,410 @@
     const s = [...a].sort((x, y) => x - y), n = s.length;
     if (!n) return null;
     return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  };
+
+  // ═══════════════════════════════════════════════════════
+  //  訊息字典（台股個股兩版共用）
+  // ═══════════════════════════════════════════════════════
+  const MSG = {
+    zh: {
+      tagBands: "近 5 年區間", tagFixed: "固定倍數", tagYours: "你的參數", tagInputs: "參數",
+      names: {
+        pefwd: ["本益比法", "年化 EPS"], pe: ["本益比法", "近四季"],
+        peg: ["本益成長比", ""], rev: ["月營收動能法", ""],
+        graham: ["葛拉漢公式", ""], roe: ["ROE 法", ""],
+        pb: ["股價淨值比法", ""], ps: ["股價營收比", ""], div: ["股利法", ""],
+      },
+      proCols: ["便宜價", "合理價", "昂貴價"],
+      colLo: "低", colMid: "中", colHi: "高",
+      labelMultiple: (v) => `${fmt(v)} 倍`,
+      labelPb: (v) => `P/B ${fmt(v)} 倍`,
+      labelYield: (v) => `殖利率 ${fmt(v)}%`,
+      labelPeg: (v) => `PEG ${fmt(v, 2)}`,
+      labelG: (v) => `g ${fmt(v, 1)}%`,
+      tagCustomEps: "你輸入的 EPS",
+      tagAnnualized: (y, q) => `年化 · ${y}Q${q}`,
+      tagRevenue: (ym) => `營收 · ${ym}`,
+      tagGrowth: (g) => `成長 ${fmt(g, 0)}%`,
+      tagGraham: (g) => `g ${fmt(g, 1)}%`,
+      tagCurrent: (v) => `目前 ${fmt(v)} 倍`,
+      srcCustomEps: (e) => `EPS ${fmt(e)} 元（自訂）`,
+      srcQuarter: (y, q) => `依 ${y}Q${q} 季報`,
+      srcMonth: (ym) => `依 ${ym} 月營收`,
+      srcPrevYear: (y) => `對比 ${y} 年度`,
+      srcSps: (v) => `每股營收 ${fmt(v)} 元`,
+      srcEps: (e, src) => `EPS ${fmt(e)} 元 · ${src}`,
+      epsSrcCustom: "自訂", epsSrcRevenue: "月營收推估",
+      epsSrcQuarter: "季報年化", epsSrcTtm: "近四季 EPS",
+      dataDate: (d) => `資料日 ${d}`,
+      dataDateNone: "資料日 —",
+      count: (n) => `${n} 檔上市櫃個股`,
+      closeOn: (d) => `收盤 ${d}`,
+      includeAria: "是否納入綜合評估",
+      scaleMin: "最小", scaleMid: "中位數", scaleMax: "最大",
+      scaleCheap: "便宜", scaleFair: "合理", scaleRich: "昂貴",
+      pricePrefix: "現價",
+      noHit: (q) => `找不到「${q}」——請輸入股票代號或公司名稱`,
+      // 個股卡 / 彙總 / 狀態
+      market: { "上市": "上市", "上櫃": "上櫃" },
+      dilutionMain: (list, factor, rawEps, eps, rawBvps, bvps) =>
+        `本檔於 ${list}。交易所公布的本益比與股價淨值比在除權後，是用已稀釋的股價
+         除以尚未按新股本重算的每股盈餘，因此本站已把 EPS 與每股淨值除以
+         <b>${fmt(factor, 4)}</b> 還原成攤薄後的數字
+         （EPS ${fmt(rawEps)} → <b>${fmt(eps)}</b>，
+         每股淨值 ${fmt(rawBvps)} → <b>${fmt(bvps)}</b>）。`,
+      dilutionEvent: (d, k) => `<b>${d}</b> 配股 <b>${fmt(k * 100, 1)}%</b>`,
+      dilutionUnknown: (dates) =>
+        `另有 ${dates} 的<b>權息</b>（同日配股又配息），
+         公開資料無法把配股率與現金股利分離，<b>這部分未修正</b>，
+         實際對應價可能再低一些。`,
+      dilutionApprox: "上櫃來源未提供財報基準季，此處以近 150 天內是否除權作近似判斷。",
+      proNoRank: "各公式結果差異過大或參數異常，無法整合出位階，請看下方個別公式。",
+      proNone: "目前沒有任何公式可計算（多半是虧損且不配息），或所有公式都被取消勾選。",
+      proHeadCheap: (p, cheap, gap) =>
+        `現價 <b>${fmt(p)}</b> 元已<b>低於便宜價 ${fmt(cheap)}</b> 元 (低 ${fmt(gap, 1)}%)`,
+      proHeadNearby: (p, higher, vs) =>
+        `現價 <b>${fmt(p)}</b> 元位於便宜價與合理價之間，${higher ? "高" : "低"}於合理價 ${fmt(vs, 1)}%`,
+      proHeadFair: (p, vs) =>
+        `現價 <b>${fmt(p)}</b> 元位於合理價與昂貴價之間，高於合理價 ${fmt(vs, 1)}%`,
+      proHeadRich: (p, rich, vs) =>
+        `現價 <b>${fmt(p)}</b> 元已<b>高於昂貴價 ${fmt(rich)}</b> 元，高於合理價 ${fmt(vs, 1)}%`,
+      proActEnter: "<b>符合進場條件</b>　依上述規則，現價落在「進場區」。",
+      proActNear: (cheap, diff, gap) =>
+        `<b>接近進場</b>　距便宜價 ${fmt(cheap)} 元還差 <b>${fmt(diff)} 元（${fmt(gap, 1)}%）</b>。`,
+      proActHigh: (cheap, diff, gap) =>
+        `<b>偏高</b>　距便宜價 ${fmt(cheap)} 元還差 <b>${fmt(diff)} 元（${fmt(gap, 1)}%）</b>。`,
+      proActHot: (cheap, diff, gap) =>
+        `<b>過熱</b>　距便宜價 ${fmt(cheap)} 元還差 <b>${fmt(diff)} 元（${fmt(gap, 1)}%）</b>。`,
+      proThin: (n) =>
+        `<span class="verdict-thin">⚠︎ 目前只有 ${n} 種公式可計算，
+         三個價位等同單一模型的輸出，位階判定沒有參考意義。</span>`,
+      proNote: (n) =>
+        `<span class="verdict-note">位階由 ${n} 種公式各欄的中位數比對而得，
+         門檻即上方三個價位，改「計算參數」就會改變。這是機械式的規則判定，
+         不預測股價、不考慮產業前景與個人財務狀況，<b>不構成投資建議</b>。</span>`,
+      sumSingle: "目前納入的公式只產生單一數值，無法做分佈統計，請直接看下方各公式的計算結果。",
+      sumNone: "目前沒有任何公式可計算（多數公式需要獲利或股利為正），或所有公式都被取消勾選。",
+      verdict: (p, used, all, lo, hi, md, pct, sign, vs) =>
+        `現價 <b>${fmt(p)}</b> 元。目前納入 <b>${used}</b> 種公式、
+         共 <b>${all}</b> 個計算值，範圍 <b>${fmt(lo)}</b> ～ <b>${fmt(hi)}</b> 元，
+         中位數 <b>${fmt(md)}</b> 元。<br>
+         現價高於其中 <b>${fmt(pct, 0)}%</b> 的計算值，
+         與中位數相差 <b>${sign}${fmt(vs, 1)}%</b>。
+         <span class="verdict-note">以上為敘述統計，計算值取決於你在「計算參數」中設定的倍數與假設，
+         本站不對這些數值作任何評價，也不構成買賣建議。</span>`,
+      verdictThin: (n, psHint) =>
+        `<span class="verdict-thin">⚠︎ 目前只有 ${n} 種公式可計算（多數需要獲利為正），
+         統計量等同單一模型的輸出，離散程度沒有參考意義。${psHint}</span>`,
+      psHint: "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 依同業設定倍數後可勾選納入。",
+      loadFailTitle: "讀不到股價資料",
+      loadFail: (m) =>
+        `無法載入 <code>data/latest.json</code>（${m}）。<br>
+         若是在本機直接以檔案開啟網頁，瀏覽器會擋下讀取，請改用
+         <code>python3 -m http.server</code> 起一個本機伺服器再瀏覽。`,
+      refreshFailTitle: "即時更新失敗",
+      refreshFail:
+        `瀏覽器受同源政策限制無法直接連線交易所，本站改走公共 CORS 代理，
+         而代理此刻沒有回應。<br>頁面仍在使用每日自動更新的資料，功能不受影響。`,
+      upToDateTitle: "已是最新資料",
+      upToDateSome: (total, failed, newest, n) =>
+        `重新抓取了${total}，${failed}原本就已經是 ${newest}
+         的收盤資料，不需要更新。全站 ${n} 檔都是最新的。`,
+      upToDateAll: (total, newest) => `已更新 ${total}，資料日 ${newest}。`,
+      staleTitle: (stale) => `${stale}沒有更新到`,
+      staleBody: (total, newest, stale, dates) =>
+        `已重新抓取${total}（${newest}）；<b>${stale}</b>的代理連線失敗，
+         仍顯示每日排程抓到的 ${dates} 資料。這些數字本身是正確的，只是日期較舊。`,
+      marketCount: (m, n) => `${m} ${n} 檔`,
+      listSep: "、",
+      f: {
+        dilutionAdj: (list, factor) =>
+          `<br><span class="formula-adj">↳ 已依 ${list} 攤薄（÷ ${fmt(factor, 4)}）</span>`,
+        dilutionItem: (d, k) => `${d} 配股 ${fmt(k * 100, 1)}%`,
+        roeNoBvps: "缺少每股淨值資料（無股價淨值比），無法估算。",
+        roeNoRoe: "缺少 ROE（需要本益比與股價淨值比同時存在），多因公司虧損。",
+        roeGteR: "永續成長率 g 必須小於要求報酬率 r，模型無解，請調整參數。",
+        roeLow: (roe, g) => `ROE ${fmt(roe)}% 未高於永續成長率 g ${fmt(g, 1)}%，模型會得出負值或極低估值，不適用。`,
+        roeBasis: (r, g, mos) => `r ${fmt(r, 1)}%　g ${fmt(g, 1)}%　安全邊際 ${fmt(mos, 0)}%`,
+        roeFormula: (roe, g, r, pb, rawBvps, bvps, diluted, fair, mos) =>
+          `模型 P/B ＝ (ROE ${fmt(roe)}% − g ${fmt(g, 1)}%) ÷ (r ${fmt(r, 1)}% − g ${fmt(g, 1)}%) ＝ ${fmt(pb)} 倍` +
+          (diluted ? `<br>每股淨值 ${fmt(rawBvps)} 依配股攤薄 → ${fmt(bvps)} 元` : "") +
+          `<br>對應價 ＝ 每股淨值 ${fmt(bvps)} × ${fmt(pb)} ＝ ${fmt(fair)} 元<br>` +
+          `上下限 ＝ 對應價 × (1 ∓ 安全邊際 ${fmt(mos, 0)}%)`,
+        pbNoData: "來源未提供股價淨值比，無法推算每股淨值。",
+        pbFormula: (p, pbr, raw, note, bvps, lo, mid, hi) =>
+          `每股淨值 ＝ 收盤價 ${fmt(p)} ÷ 股價淨值比 ${fmt(pbr)} ＝ ${fmt(raw)} 元` + note +
+          `<br>對應價 ＝ ${fmt(bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+        divNone: "近一年無現金股利（或殖利率為 0），股利法不適用。",
+        divFormula: (p, y, d, yc, yf, yr) =>
+          `每股現金股利 ＝ 收盤價 ${fmt(p)} × 殖利率 ${fmt(y)}% ＝ ${fmt(d)} 元<br>` +
+          `對應價 ＝ ${fmt(d)} ÷ ${fmt(yc)}% / ${fmt(yf)}% / ${fmt(yr)}%<br>` +
+          `（殖利率與價格成反比，殖利率越高對應的價格越低）`,
+        customEpsFormula: (e, lo, mid, hi) =>
+          `對應價 ＝ 你輸入的 EPS ${fmt(e)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+          `<br><span class="formula-warn">※ 目前使用自訂 EPS，清空參數區的欄位即可改回依季報計算</span>`,
+        fwdNoQuarter: "尚無季報資料（公司申報進度不一，本站每日累積），此法暫不適用。",
+        fwdLoss: (y, q, cum) =>
+          `最新季報（${y}Q${q}）累計每股盈餘為 ${fmt(cum)} 元，虧損無法年化，此法不適用。`,
+        fwdRisk: { 1: "只用一季實績推全年，外推成分最重，淡旺季或一次性損益會被放大四倍",
+                   2: "以半年實績推全年，淡旺季影響仍需留意",
+                   3: "已有前三季實績，外推誤差較小",
+                   4: "已是全年實績，沒有外推" },
+        fwdFormula: (y, q, cum, raw, dil, eps, lo, mid, hi, mult, risk) =>
+          `年化 EPS ＝ ${y}Q${q} 累計 ${fmt(cum)} ÷ ${q} 季 × 4 ＝ ${fmt(raw)} 元` +
+          (dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(dil, 4)} ＝ ${fmt(eps)} 元</span>` : "") +
+          `<br>對應價 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+          `<br><span class="formula-warn">※ 以 ${q} 季實績外推全年（×${mult}）：${risk}</span>`,
+        revNoTable: "月營收彙總表未收錄本檔（金融保險業沒有可比的營收概念）。",
+        revNoQuarter: "缺少季報營收，無法推算每一元營收對應的獲利。",
+        revLoss: (y, q) => `最新季報（${y}Q${q}）累計仍為虧損，無法用營收推估獲利。`,
+        revNotPositive: "推估結果非正值，此法不適用。",
+        revTrend: (yoy) => `，累計營收年增 <b>${fmt(yoy, 1)}%</b>`,
+        revFormula: (cum, mo, annual, trend, y, q, qeps, qrev, raw, dil, eps, lo, mid, hi) =>
+          `推估年營收 ＝ 累計 ${fmt(cum, 1)} 億 ÷ ${mo} 月 × 12 ＝ ${fmt(annual, 1)} 億${trend}<br>` +
+          `每元營收獲利 ＝ ${y}Q${q} EPS ${fmt(qeps)} ÷ 營收 ${fmt(qrev, 1)} 億<br>` +
+          `推估年 EPS ＝ ${fmt(annual, 1)} 億 × 該比率 ＝ ${fmt(raw)} 元` +
+          (dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(dil, 4)} ＝ ${fmt(eps)} 元</span>` : "") +
+          `<br>對應價 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+          `<br><span class="formula-warn">※ 假設今年淨利率與季報一致；毛利率若明顯變動會失準</span>`,
+        pegNoData: "缺少季報資料或今年累計為虧損，無法推估成長率。",
+        pegNoPrev: (y) => `缺少 ${y} 年度全年每股盈餘，無法計算成長率（本站每日累積歷年財報）。`,
+        pegPrevLoss: (y, p) => `${y} 年度為虧損（每股 ${fmt(p)} 元），由虧轉盈的成長率沒有意義，此法不適用。`,
+        pegShrink: (e, p, g) =>
+          `預估今年 EPS ${fmt(e)} 元低於去年 ${fmt(p)} 元（衰退 ${fmt(g, 1)}%），PEG 不適用於獲利衰退的公司。`,
+        pegBasis: (lo, mid, hi) => `目標 PEG ${fmt(lo, 2)} / ${fmt(mid, 2)} / ${fmt(hi, 2)}`,
+        pegFormula: (e, y, p, gRaw, capped, cap, g, lo, mid, hi) =>
+          `成長率 ＝ 預估今年 ${fmt(e)} ÷ ${y} 年 ${fmt(p)} − 1 ＝ ${fmt(gRaw, 1)}%` +
+          (capped ? `<br><span class="formula-adj">↳ 超過上限，以 ${fmt(cap, 0)}% 計算</span>` : "") +
+          `<br>對應本益比 ＝ 成長率 ${fmt(g, 1)} × 目標 PEG<br>` +
+          `對應價 ＝ ${fmt(e)} × ${fmt(g, 1)} × ${fmt(lo, 2)} / ${fmt(mid, 2)} / ${fmt(hi, 2)}` +
+          `<br><span class="formula-warn">※ 以單一年度成長率外推，景氣循環股容易高估</span>`,
+        psNoTable: "月營收彙總表未收錄本檔（金融保險業沒有可比的營收概念）。",
+        psNoQuarter: "缺少季報營收或淨利，無法反推每股營收。",
+        psBadSign: "季報每股盈餘與淨利符號不一致，資料異常，此法略過。",
+        psNotPositive: "推估每股營收非正值。",
+        psFormula: (annual, y, q, qeps, qni, sps, cur, lo, mid, hi) =>
+          `每股營收 ＝ 推估年營收 ${fmt(annual, 1)} 億 × (${y}Q${q} EPS ${fmt(qeps)} ÷ 淨利 ${fmt(qni, 1)} 億)<br>` +
+          `　　　　　＝ ${fmt(sps)} 元　目前股價營收比 ${fmt(cur)} 倍<br>` +
+          `對應價 ＝ ${fmt(sps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+          `<br><span class="formula-warn">※ 合理倍數因產業而異極大（軟體可達 5~10 倍、通路常低於 0.5 倍）。` +
+          `因為沒有一組通用預設值，本法<b>預設不納入綜合評估</b> —— 請先依同業水準` +
+          `調整上方參數，再勾選納入。它的價值在於營收恆為正，虧損公司也估得出來。</span>`,
+        grahamNoEps: "缺少可用的每股盈餘（公司虧損），或你尚未在參數區輸入自訂 EPS。",
+        grahamBasis: (g, span) => `成長率 g ${fmt(g, 1)}%（±${fmt(span, 1)}%）`,
+        grahamFormula: (g0, g1, g2, m0, m1, m2, eps) =>
+          `葛拉漢公式　V ＝ EPS × (8.5 + 2g)<br>` +
+          `代入 g ＝ ${fmt(g0, 1)} / ${fmt(g1, 1)} / ${fmt(g2, 1)}%　→　倍數 ${fmt(m0)} / ${fmt(m1)} / ${fmt(m2)}<br>` +
+          `V ＝ ${fmt(eps)} × 各倍數` +
+          `<br><span class="formula-warn">※ 8.5 為葛拉漢 1962 年提出的零成長基準本益比，成長率 g 完全由你設定；` +
+          `此式未考慮利率環境，原著另有以公司債殖利率調整的版本</span>`,
+        peNoData: "來源未提供本益比（通常代表近四季為虧損），本益比法不適用。",
+        peFormula: (p, pe, raw, note, eps, lo, mid, hi) =>
+          `近四季 EPS ＝ 收盤價 ${fmt(p)} ÷ 本益比 ${fmt(pe)} ＝ ${fmt(raw)} 元` + note +
+          `<br>對應價 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+      },
+    },
+    en: {
+      tagBands: "5-year range", tagFixed: "Fixed multiple", tagYours: "Your inputs", tagInputs: "Inputs",
+      names: {
+        pefwd: ["P/E method", "forward"], pe: ["P/E method", "trailing"],
+        peg: ["PEG ratio", ""], rev: ["Monthly revenue momentum", ""],
+        graham: ["Graham formula", ""], roe: ["Return on equity", ""],
+        pb: ["Price / book", ""], ps: ["Price / sales", ""], div: ["Dividend", ""],
+      },
+      proCols: ["Cheap", "Fair", "Expensive"],
+      colLo: "Low", colMid: "Mid", colHi: "High",
+      labelMultiple: (v) => `${fmt(v)}x`,
+      labelPb: (v) => `P/B ${fmt(v)}x`,
+      labelYield: (v) => `yield ${fmt(v)}%`,
+      labelPeg: (v) => `PEG ${fmt(v, 2)}`,
+      labelG: (v) => `g ${fmt(v, 1)}%`,
+      tagCustomEps: "your EPS",
+      tagAnnualized: (y, q) => `annualized · ${y}Q${q}`,
+      tagRevenue: (ym) => `revenue · ${ym}`,
+      tagGrowth: (g) => `growth ${fmt(g, 0)}%`,
+      tagGraham: (g) => `g ${fmt(g, 1)}%`,
+      tagCurrent: (v) => `now ${fmt(v)}x`,
+      srcCustomEps: (e) => `EPS ${fmt(e)} (your figure)`,
+      srcQuarter: (y, q) => `from ${y}Q${q} filing`,
+      srcMonth: (ym) => `from ${ym} revenue`,
+      srcPrevYear: (y) => `vs FY${y}`,
+      srcSps: (v) => `revenue/share NT$${fmt(v)}`,
+      srcEps: (e, src) => `EPS NT$${fmt(e)} · ${src}`,
+      epsSrcCustom: "your figure", epsSrcRevenue: "from monthly revenue",
+      epsSrcQuarter: "annualized from filings", epsSrcTtm: "trailing 12M EPS",
+      dataDate: (d) => `Data as of ${d}`,
+      dataDateNone: "Data as of —",
+      count: (n) => `${n} TWSE / TPEx stocks`,
+      closeOn: (d) => `close ${d}`,
+      includeAria: "Include in the summary",
+      scaleMin: "Min", scaleMid: "Median", scaleMax: "Max",
+      scaleCheap: "Cheap", scaleFair: "Fair", scaleRich: "Expensive",
+      pricePrefix: "Price",
+      noHit: (q) => `No match for "${q}" — enter a ticker or company name`,
+      market: { "上市": "TWSE", "上櫃": "TPEx" },
+      dilutionMain: (list, factor, rawEps, eps, rawBvps, bvps) =>
+        `This stock had ${list}. After a stock dividend the exchange computes P/E and P/B from the
+         <b>already-diluted price</b> divided by EPS that has <b>not</b> been restated for the new
+         share count, so this site divides EPS and book value per share by <b>${fmt(factor, 4)}</b>
+         to restore the diluted figures
+         (EPS ${fmt(rawEps)} → <b>${fmt(eps)}</b>,
+         book value per share ${fmt(rawBvps)} → <b>${fmt(bvps)}</b>).`,
+      dilutionEvent: (d, k) => `a <b>${fmt(k * 100, 1)}%</b> stock dividend on <b>${d}</b>`,
+      dilutionUnknown: (dates) =>
+        `There was also a <b>combined stock and cash dividend</b> on ${dates}. Public data cannot
+         separate the stock-dividend ratio from the cash portion, so <b>that part is not
+         corrected</b> and the true figures may be slightly lower.`,
+      dilutionApprox: "The TPEx source does not publish a fiscal reference quarter, so this uses a 150-day look-back as an approximation.",
+      proNoRank: "The formulas disagree too widely, or the assumptions are out of range, so no position can be derived. Read the individual cards below.",
+      proNone: "No formula can be computed right now (usually a loss-making, non-paying company), or every formula has been unticked.",
+      proHeadCheap: (p, cheap, gap) =>
+        `At <b>NT$${fmt(p)}</b> the price is <b>below the cheap price of NT$${fmt(cheap)}</b> (by ${fmt(gap, 1)}%)`,
+      proHeadNearby: (p, higher, vs) =>
+        `At <b>NT$${fmt(p)}</b> the price sits between the cheap and fair prices, ${higher ? "above" : "below"} fair by ${fmt(vs, 1)}%`,
+      proHeadFair: (p, vs) =>
+        `At <b>NT$${fmt(p)}</b> the price sits between the fair and expensive prices, above fair by ${fmt(vs, 1)}%`,
+      proHeadRich: (p, rich, vs) =>
+        `At <b>NT$${fmt(p)}</b> the price is <b>above the expensive price of NT$${fmt(rich)}</b>, and above fair by ${fmt(vs, 1)}%`,
+      proActEnter: "<b>Meets the entry condition.</b>　By the rule above, the price falls in the entry zone.",
+      proActNear: (cheap, diff, gap) =>
+        `<b>Approaching entry.</b>　Still <b>NT$${fmt(diff)} (${fmt(gap, 1)}%)</b> above the cheap price of NT$${fmt(cheap)}.`,
+      proActHigh: (cheap, diff, gap) =>
+        `<b>On the high side.</b>　Still <b>NT$${fmt(diff)} (${fmt(gap, 1)}%)</b> above the cheap price of NT$${fmt(cheap)}.`,
+      proActHot: (cheap, diff, gap) =>
+        `<b>Overheated.</b>　Still <b>NT$${fmt(diff)} (${fmt(gap, 1)}%)</b> above the cheap price of NT$${fmt(cheap)}.`,
+      proThin: (n) =>
+        `<span class="verdict-thin">⚠︎ Only ${n} formula${n > 1 ? "s" : ""} can be computed right now,
+         so the three prices amount to the output of a single model and the position reading means nothing.</span>`,
+      proNote: (n) =>
+        `<span class="verdict-note">The position comes from comparing the median of each column across
+         ${n} formulas; the thresholds are the three prices above and change with your assumptions.
+         This is a mechanical rule, not a forecast — it does not predict prices and takes no account
+         of industry outlook or your personal finances. <b>It is not investment advice.</b></span>`,
+      sumSingle: "The formulas currently included produce a single value, so there is no distribution to describe. Read the individual cards below.",
+      sumNone: "No formula can be computed right now (most need positive earnings or a dividend), or every formula has been unticked.",
+      verdict: (p, used, all, lo, hi, md, pct, sign, vs) =>
+        `Price <b>NT$${fmt(p)}</b>. <b>${used}</b> formula${used > 1 ? "s" : ""} included, producing
+         <b>${all}</b> values ranging <b>NT$${fmt(lo)}</b> to <b>NT$${fmt(hi)}</b>, median
+         <b>NT$${fmt(md)}</b>.<br>
+         The current price is above <b>${fmt(pct, 0)}%</b> of those values and differs from the
+         median by <b>${sign}${fmt(vs, 1)}%</b>.
+         <span class="verdict-note">These are descriptive statistics. The values depend entirely on
+         the multiples and assumptions you set under "Assumptions". This site does not evaluate them
+         and gives no buy or sell advice.</span>`,
+      verdictThin: (n, psHint) =>
+        `<span class="verdict-thin">⚠︎ Only ${n} formula${n > 1 ? "s" : ""} can be computed right now
+         (most need positive earnings), so these statistics amount to the output of a single model and
+         the spread means nothing. ${psHint}</span>`,
+      psHint: "<b>Price / sales</b> is computable for this stock but excluded by default — set the multiples to the peer level, then tick it in.",
+      loadFailTitle: "Could not load price data",
+      loadFail: (m) =>
+        `Failed to fetch <code>data/latest.json</code> (${m}).<br>
+         If you opened this page directly from the filesystem the browser will block the request;
+         run <code>python3 -m http.server</code> and browse through that instead.`,
+      refreshFailTitle: "Live update failed",
+      refreshFail:
+        `The browser's same-origin policy blocks direct calls to the exchanges, so this site routes
+         through a public CORS proxy — and the proxy is not responding right now.<br>
+         The page is still using the daily scheduled data; nothing else is affected.`,
+      upToDateTitle: "Already up to date",
+      upToDateSome: (total, failed, newest, n) =>
+        `Re-fetched ${total}. ${failed} was already on the ${newest} close and needed no update.
+         All ${n} stocks are current.`,
+      upToDateAll: (total, newest) => `Updated ${total}. Data as of ${newest}.`,
+      staleTitle: (stale) => `${stale} was not updated`,
+      staleBody: (total, newest, stale, dates) =>
+        `Re-fetched ${total} (${newest}); the proxy connection for <b>${stale}</b> failed, so it still
+         shows the ${dates} data from the daily schedule. Those figures are correct, just older.`,
+      marketCount: (m, n) => `${m} ${n}`,
+      listSep: ", ",
+      f: {
+        dilutionAdj: (list, factor) =>
+          `<br><span class="formula-adj">↳ Diluted for ${list} (÷ ${fmt(factor, 4)})</span>`,
+        dilutionItem: (d, k) => `${d} stock dividend ${fmt(k * 100, 1)}%`,
+        roeNoBvps: "No book value per share available (no P/B figure), so this cannot be estimated.",
+        roeNoRoe: "No ROE available (it needs both P/E and P/B, which usually means the company is loss-making).",
+        roeGteR: "Perpetual growth g must be below the required return r, otherwise the model has no solution. Adjust the assumptions.",
+        roeLow: (roe, g) => `ROE ${fmt(roe)}% does not exceed perpetual growth g ${fmt(g, 1)}%, so the model returns a negative or near-zero value and does not apply.`,
+        roeBasis: (r, g, mos) => `r ${fmt(r, 1)}%　g ${fmt(g, 1)}%　margin of safety ${fmt(mos, 0)}%`,
+        roeFormula: (roe, g, r, pb, rawBvps, bvps, diluted, fair, mos) =>
+          `Model P/B = (ROE ${fmt(roe)}% − g ${fmt(g, 1)}%) ÷ (r ${fmt(r, 1)}% − g ${fmt(g, 1)}%) = ${fmt(pb)}x` +
+          (diluted ? `<br>Book value per share ${fmt(rawBvps)} diluted by the stock dividend → NT$${fmt(bvps)}` : "") +
+          `<br>Price = book value per share ${fmt(bvps)} × ${fmt(pb)} = NT$${fmt(fair)}<br>` +
+          `Bounds = price × (1 ∓ margin of safety ${fmt(mos, 0)}%)`,
+        pbNoData: "The source does not publish a P/B ratio, so book value per share cannot be derived.",
+        pbFormula: (p, pbr, raw, note, bvps, lo, mid, hi) =>
+          `Book value per share = close ${fmt(p)} ÷ P/B ${fmt(pbr)} = NT$${fmt(raw)}` + note +
+          `<br>Price = ${fmt(bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x`,
+        divNone: "No cash dividend in the past year (or the yield is 0), so the dividend method does not apply.",
+        divFormula: (p, y, d, yc, yf, yr) =>
+          `Dividend per share = close ${fmt(p)} × yield ${fmt(y)}% = NT$${fmt(d)}<br>` +
+          `Price = ${fmt(d)} ÷ ${fmt(yc)}% / ${fmt(yf)}% / ${fmt(yr)}%<br>` +
+          `(Yield moves inversely to price — the higher the yield, the lower the price)`,
+        customEpsFormula: (e, lo, mid, hi) =>
+          `Price = your EPS ${fmt(e)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x` +
+          `<br><span class="formula-warn">※ Using your own EPS. Clear the field under Assumptions to go back to the filed figures.</span>`,
+        fwdNoQuarter: "No quarterly filing yet (companies file on different schedules; this site accumulates them daily), so this method does not apply for now.",
+        fwdLoss: (y, q, cum) =>
+          `Cumulative EPS in the latest filing (${y}Q${q}) is ${fmt(cum)} — a loss cannot be annualized, so this method does not apply.`,
+        fwdRisk: { 1: "one quarter extrapolated to a full year — the most extrapolation of all; seasonality or one-off items get multiplied by four",
+                   2: "half a year extrapolated to a full year; seasonality still matters",
+                   3: "three quarters of actuals, so extrapolation error is small",
+                   4: "a full year of actuals, no extrapolation" },
+        fwdFormula: (y, q, cum, raw, dil, eps, lo, mid, hi, mult, risk) =>
+          `Annualized EPS = ${y}Q${q} cumulative ${fmt(cum)} ÷ ${q} quarters × 4 = NT$${fmt(raw)}` +
+          (dil > 1 ? `<br><span class="formula-adj">↳ Then diluted for the stock dividend ÷ ${fmt(dil, 4)} = NT$${fmt(eps)}</span>` : "") +
+          `<br>Price = ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x` +
+          `<br><span class="formula-warn">※ ${q} quarter${q > 1 ? "s" : ""} extrapolated to a full year (×${mult}): ${risk}</span>`,
+        revNoTable: "This stock is not in the monthly revenue tables (financial and insurance companies have no comparable revenue concept).",
+        revNoQuarter: "No quarterly revenue, so earnings per dollar of revenue cannot be derived.",
+        revLoss: (y, q) => `The latest filing (${y}Q${q}) is still cumulatively loss-making, so earnings cannot be estimated from revenue.`,
+        revNotPositive: "The estimate is not positive, so this method does not apply.",
+        revTrend: (yoy) => `, cumulative revenue up <b>${fmt(yoy, 1)}%</b> year on year`,
+        revFormula: (cum, mo, annual, trend, y, q, qeps, qrev, raw, dil, eps, lo, mid, hi) =>
+          `Estimated annual revenue = cumulative ${fmt(cum / 100, 2)}bn ÷ ${mo} months × 12 = NT$${fmt(annual / 100, 2)}bn${trend}<br>` +
+          `EPS per dollar of revenue = ${y}Q${q} EPS ${fmt(qeps)} ÷ revenue NT$${fmt(qrev / 100, 2)}bn<br>` +
+          `Estimated annual EPS = ${fmt(annual / 100, 2)}bn × that ratio = NT$${fmt(raw)}` +
+          (dil > 1 ? `<br><span class="formula-adj">↳ Then diluted for the stock dividend ÷ ${fmt(dil, 4)} = NT$${fmt(eps)}</span>` : "") +
+          `<br>Price = ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x` +
+          `<br><span class="formula-warn">※ Assumes this year's net margin matches the quarterly filing; a material change in gross margin will throw it off</span>`,
+        pegNoData: "No quarterly data, or this year is cumulatively loss-making, so growth cannot be estimated.",
+        pegNoPrev: (y) => `No full-year EPS for ${y}, so growth cannot be computed (this site accumulates prior-year filings daily).`,
+        pegPrevLoss: (y, p) => `${y} was a loss (${fmt(p)} per share); a loss-to-profit growth rate is meaningless, so this method does not apply.`,
+        pegShrink: (e, p, g) =>
+          `Estimated EPS of ${fmt(e)} this year is below last year's ${fmt(p)} (down ${fmt(g, 1)}%). PEG does not apply to shrinking earnings.`,
+        pegBasis: (lo, mid, hi) => `target PEG ${fmt(lo, 2)} / ${fmt(mid, 2)} / ${fmt(hi, 2)}`,
+        pegFormula: (e, y, p, gRaw, capped, cap, g, lo, mid, hi) =>
+          `Growth = estimated ${fmt(e)} ÷ ${y} actual ${fmt(p)} − 1 = ${fmt(gRaw, 1)}%` +
+          (capped ? `<br><span class="formula-adj">↳ Above the cap, computed at ${fmt(cap, 0)}%</span>` : "") +
+          `<br>Implied P/E = growth ${fmt(g, 1)} × target PEG<br>` +
+          `Price = ${fmt(e)} × ${fmt(g, 1)} × ${fmt(lo, 2)} / ${fmt(mid, 2)} / ${fmt(hi, 2)}` +
+          `<br><span class="formula-warn">※ Extrapolated from a single year's growth; cyclicals are easily overvalued</span>`,
+        psNoTable: "This stock is not in the monthly revenue tables (financial and insurance companies have no comparable revenue concept).",
+        psNoQuarter: "No quarterly revenue or net income, so revenue per share cannot be derived.",
+        psBadSign: "Quarterly EPS and net income have inconsistent signs — the data looks wrong, so this method is skipped.",
+        psNotPositive: "Estimated revenue per share is not positive.",
+        psFormula: (annual, y, q, qeps, qni, sps, cur, lo, mid, hi) =>
+          `Revenue per share = estimated annual revenue NT$${fmt(annual / 100, 2)}bn × (${y}Q${q} EPS ${fmt(qeps)} ÷ net income NT$${fmt(qni / 100, 2)}bn)<br>` +
+          `　　　　　= NT$${fmt(sps)}　current P/S ${fmt(cur)}x<br>` +
+          `Price = ${fmt(sps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x` +
+          `<br><span class="formula-warn">※ Reasonable multiples vary enormously by industry (software can reach 5–10x, distribution is often below 0.5x). ` +
+          `With no universal default, this method is <b>excluded from the summary by default</b> — adjust the multiples above to the peer level, ` +
+          `then tick it in. Its value is that revenue is always positive, so even loss-making companies can be valued.</span>`,
+        grahamNoEps: "No usable EPS (the company is loss-making), and no custom EPS has been entered under Assumptions.",
+        grahamBasis: (g, span) => `growth g ${fmt(g, 1)}% (±${fmt(span, 1)}%)`,
+        grahamFormula: (g0, g1, g2, m0, m1, m2, eps) =>
+          `Graham formula　V = EPS × (8.5 + 2g)<br>` +
+          `With g = ${fmt(g0, 1)} / ${fmt(g1, 1)} / ${fmt(g2, 1)}%　→　multiples ${fmt(m0)} / ${fmt(m1)} / ${fmt(m2)}<br>` +
+          `V = ${fmt(eps)} × each multiple` +
+          `<br><span class="formula-warn">※ 8.5 is Graham's 1962 base P/E for a no-growth company; g is entirely yours to set. ` +
+          `The formula ignores the interest-rate environment — the original also has a version adjusted by corporate bond yields.</span>`,
+        peNoData: "The source publishes no P/E (usually meaning the trailing four quarters were a loss), so the P/E method does not apply.",
+        peFormula: (p, pe, raw, note, eps, lo, mid, hi) =>
+          `TTM EPS = close ${fmt(p)} ÷ P/E ${fmt(pe)} = NT$${fmt(raw)}` + note +
+          `<br>Price = ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}x`,
+      },
+    },
   };
 
   // ═══════════════════════════════════════════════════════
@@ -126,8 +538,8 @@
   function dilutionNote(s) {
     const a = s._adj;
     if (!a || a.factor <= 1) return "";
-    const list = a.known.map((e) => `${e.d} 配股 ${fmt(e.k * 100, 1)}%`).join("、");
-    return `<br><span class="formula-adj">↳ 已依 ${list} 攤薄（÷ ${fmt(a.factor, 4)}）</span>`;
+    const list = a.known.map((e) => M().f.dilutionItem(e.d, e.k)).join(pick("、", ", "));
+    return M().f.dilutionAdj(list, a.factor);
   }
 
   // ═══════════════════════════════════════════════════════
@@ -140,49 +552,39 @@
    *    P/B = (ROE − g) / (r − g)，再乘上每股淨值。
    *    上下限由使用者設定的安全邊際決定。 */
   function methodRoe(s) {
-    if (!s.bvps) return { na: "缺少每股淨值資料（無股價淨值比），無法估算。" };
-    if (!s.roe) return { na: "缺少 ROE（需要本益比與股價淨值比同時存在），多因公司虧損。" };
+    if (!s.bvps) return { na: M().f.roeNoBvps };
+    if (!s.roe) return { na: M().f.roeNoRoe };
     const r = params.r / 100, g = params.g / 100, roe = s.roe / 100;
-    if (g >= r) return { na: "永續成長率 g 必須小於要求報酬率 r，模型無解，請調整參數。" };
-    if (roe <= g) {
-      return { na: `ROE ${fmt(s.roe)}% 未高於永續成長率 g ${fmt(params.g, 1)}%，` +
-                   "模型會得出負值或極低估值，不適用。" };
-    }
+    if (g >= r) return { na: M().f.roeGteR };
+    if (roe <= g) return { na: M().f.roeLow(s.roe, params.g) };
     const pbFair = (roe - g) / (r - g);
     const fair = s.bvps * pbFair, m = params.mos / 100;
     return {
       cheap: fair * (1 - m), fair, rich: fair * (1 + m),
-      labels: [`P/B ${fmt(pbFair * (1 - m))} 倍`, `P/B ${fmt(pbFair)} 倍`, `P/B ${fmt(pbFair * (1 + m))} 倍`],
-      basis: `<span class="basis-tag">你的參數</span>r ${fmt(params.r, 1)}%　g ${fmt(params.g, 1)}%　安全邊際 ${fmt(params.mos, 0)}%`,
-      formula:
-        `模型 P/B ＝ (ROE ${fmt(s.roe)}% − g ${fmt(params.g, 1)}%) ÷ (r ${fmt(params.r, 1)}% − g ${fmt(params.g, 1)}%) ＝ ${fmt(pbFair)} 倍` +
-        (s._adj && s._adj.factor > 1
-          ? `<br>每股淨值 ${fmt(s._rawBvps)} 依配股攤薄 → ${fmt(s.bvps)} 元` : "") +
-        `<br>對應價 ＝ 每股淨值 ${fmt(s.bvps)} × ${fmt(pbFair)} ＝ ${fmt(fair)} 元<br>` +
-        `上下限 ＝ 對應價 × (1 ∓ 安全邊際 ${fmt(params.mos, 0)}%)`,
+      labels: [M().labelPb(pbFair * (1 - m)), M().labelPb(pbFair), M().labelPb(pbFair * (1 + m))],
+      basis: `<span class="basis-tag">${M().tagYours}</span>${M().f.roeBasis(params.r, params.g, params.mos)}`,
+      formula: M().f.roeFormula(s.roe, params.g, params.r, pbFair, s._rawBvps, s.bvps,
+                                !!(s._adj && s._adj.factor > 1), fair, params.mos),
     };
   }
 
   /* 2. 股價淨值比法 —— 每股淨值 × 你選定的 P/B 倍數 */
   function methodPb(s) {
-    if (!s.bvps) return { na: "來源未提供股價淨值比，無法推算每股淨值。" };
+    if (!s.bvps) return { na: M().f.pbNoData };
     const b = usable(s, "pb");
     const [lo, mid, hi] = b || [params.pbLo, params.pbMid, params.pbHi];
     return {
       cheap: s.bvps * lo, fair: s.bvps * mid, rich: s.bvps * hi,
-      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
-      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`),
-      formula:
-        `每股淨值 ＝ 收盤價 ${fmt(s.p)} ÷ 股價淨值比 ${fmt(s.pb)} ＝ ${fmt(s._rawBvps || s.bvps)} 元` +
-        dilutionNote(s) +
-        `<br>對應價 ＝ ${fmt(s.bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+      labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`),
+      formula: M().f.pbFormula(s.p, s.pb, s._rawBvps || s.bvps, dilutionNote(s), s.bvps, lo, mid, hi),
     };
   }
 
   /* 3. 股利法 —— 每股現金股利 ÷ 你設定的目標殖利率
    *    殖利率與股價成反比，故最高的殖利率對應最低的價格。 */
   function methodDiv(s) {
-    if (!s.d) return { na: "近一年無現金股利（或殖利率為 0），股利法不適用。" };
+    if (!s.d) return { na: M().f.divNone };
     const b = usable(s, "y");
     // 歷史區間為 [P20, P50, P80]；殖利率與價格成反比，故取用時左右對調
     const yCheap = b ? b[2] : params.yHi;
@@ -190,12 +592,9 @@
     const yRich = b ? b[0] : params.yLo;
     return {
       cheap: s.d / (yCheap / 100), fair: s.d / (yFair / 100), rich: s.d / (yRich / 100),
-      labels: [`殖利率 ${fmt(yCheap)}%`, `殖利率 ${fmt(yFair)}%`, `殖利率 ${fmt(yRich)}%`],
-      basis: basisTag(b, `殖利率 ${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%`),
-      formula:
-        `每股現金股利 ＝ 收盤價 ${fmt(s.p)} × 殖利率 ${fmt(s.y)}% ＝ ${fmt(s.d)} 元<br>` +
-        `對應價 ＝ ${fmt(s.d)} ÷ ${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%<br>` +
-        `（殖利率與價格成反比，殖利率越高對應的價格越低）`,
+      labels: [M().labelYield(yCheap), M().labelYield(yFair), M().labelYield(yRich)],
+      basis: basisTag(b, pick("殖利率 ", "yield ") + `${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%`),
+      formula: M().f.divFormula(s.p, s.y, s.d, yCheap, yFair, yRich),
     };
   }
 
@@ -216,22 +615,16 @@
       const e0 = params.customEps;
       return {
         cheap: e0 * l0, fair: e0 * m0, rich: e0 * h0,
-        labels: [`${fmt(l0)} 倍`, `${fmt(m0)} 倍`, `${fmt(h0)} 倍`],
-        tag: "你輸入的 EPS",
-        basis: basisTag(b0, `${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍`) +
-               `<span class="basis-src">EPS ${fmt(e0)} 元（自訂）</span>`,
-        formula: `對應價 ＝ 你輸入的 EPS ${fmt(e0)} × ${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍` +
-                 `<br><span class="formula-warn">※ 目前使用自訂 EPS，清空參數區的欄位即可改回依季報計算</span>`,
+        labels: [M().labelMultiple(l0), M().labelMultiple(m0), M().labelMultiple(h0)],
+        tag: M().tagCustomEps,
+        basis: basisTag(b0, `${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)}${X()}`) +
+               `<span class="basis-src">${M().srcCustomEps(e0)}</span>`,
+        formula: M().f.customEpsFormula(e0, l0, m0, h0),
       };
     }
     const f = QUARTERLY[s.c];
-    if (!f) {
-      return { na: "尚無季報資料（公司申報進度不一，本站每日累積），此法暫不適用。" };
-    }
-    if (!(f.cum > 0)) {
-      return { na: `最新季報（${f.y}Q${f.q}）累計每股盈餘為 ${fmt(f.cum)} 元，` +
-                   "虧損無法年化，此法不適用。" };
-    }
+    if (!f) return { na: M().f.fwdNoQuarter };
+    if (!(f.cum > 0)) return { na: M().f.fwdLoss(f.y, f.q, f.cum) };
     const raw = (f.cum / f.q) * 4;
 
     // 季報的每股盈餘同樣不會反映季末之後才發生的配股，比照做攤薄
@@ -242,23 +635,14 @@
     const b = usable(s, "pe");
     const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
     const mult = { 1: 4, 2: 2, 3: "4/3", 4: 1 }[f.q];
-    const risk = {
-      1: "只用一季實績推全年，外推成分最重，淡旺季或一次性損益會被放大四倍",
-      2: "以半年實績推全年，淡旺季影響仍需留意",
-      3: "已有前三季實績，外推誤差較小",
-      4: "已是全年實績，沒有外推",
-    }[f.q];
+    const risk = M().f.fwdRisk[f.q];
     return {
       cheap: eps * lo, fair: eps * mid, rich: eps * hi,
-      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
-      tag: `年化 · ${f.y}Q${f.q}`,
-      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`) +
-             `<span class="basis-src">依 ${f.y}Q${f.q} 季報</span>`,
-      formula:
-        `年化 EPS ＝ ${f.y}Q${f.q} 累計 ${fmt(f.cum)} ÷ ${f.q} 季 × 4 ＝ ${fmt(raw)} 元` +
-        (dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(dil, 4)} ＝ ${fmt(eps)} 元</span>` : "") +
-        `<br>對應價 ＝ ${fmt(eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
-        `<br><span class="formula-warn">※ 以 ${f.q} 季實績外推全年（×${mult}）：${risk}</span>`,
+      labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
+      tag: M().tagAnnualized(f.y, f.q),
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`) +
+             `<span class="basis-src">${M().srcQuarter(f.y, f.q)}</span>`,
+      formula: M().f.fwdFormula(f.y, f.q, f.cum, raw, dil, eps, lo, mid, hi, mult, risk),
     };
   }
 
@@ -269,17 +653,17 @@
   function estimateAnnualEps(s) {
     if (params.customEps > 0) {
       return { eps: params.customEps, raw: params.customEps, dil: 1,
-               src: "自訂", custom: true };
+               src: M().epsSrcCustom, custom: true };
     }
     const f = QUARTERLY[s.c], r = REVENUE[s.c];
     if (!f || !(f.cum > 0)) return null;
     let raw, src;
     if (r && f.rev > 0) {
       raw = (r.cum / r.mo) * 12 * (f.cum / f.rev);
-      src = "營收";
+      src = "rev";              // 內部代號，顯示時再依語言轉成文字
     } else {
       raw = (f.cum / f.q) * 4;
-      src = "季報";
+      src = "qtr";
     }
     if (!(raw > 0)) return null;
     const adj = dilutionSince(s.c, fiscalEnd(`${f.y}/${f.q}`), false);
@@ -299,37 +683,25 @@
    */
   function methodRevenue(s) {
     const r = REVENUE[s.c], f = QUARTERLY[s.c];
-    if (!r) {
-      return { na: "月營收彙總表未收錄本檔（金融保險業沒有可比的營收概念）。" };
-    }
-    if (!f || !(f.rev > 0)) {
-      return { na: "缺少季報營收，無法推算每一元營收對應的獲利。" };
-    }
-    if (!(f.cum > 0)) {
-      return { na: `最新季報（${f.y}Q${f.q}）累計仍為虧損，無法用營收推估獲利。` };
-    }
+    if (!r) return { na: M().f.revNoTable };
+    if (!f || !(f.rev > 0)) return { na: M().f.revNoQuarter };
+    if (!(f.cum > 0)) return { na: M().f.revLoss(f.y, f.q) };
     const est = estimateAnnualEps(s);
-    if (!est) return { na: "推估結果非正值，此法不適用。" };
+    if (!est) return { na: M().f.revNotPositive };
 
     const annualRev = (r.cum / r.mo) * 12;
     const b = usable(s, "pe");
     const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
     const ym = r.ym.slice(0, 3) + "/" + r.ym.slice(3);
-    const trend = r.yoy == null ? "" :
-      `，累計營收年增 <b>${fmt(r.yoy, 1)}%</b>`;
+    const trend = r.yoy == null ? "" : M().f.revTrend(r.yoy);
     return {
       cheap: est.eps * lo, fair: est.eps * mid, rich: est.eps * hi,
-      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
-      tag: `營收 · ${ym}`,
-      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`) +
-             `<span class="basis-src">依 ${ym} 月營收</span>`,
-      formula:
-        `推估年營收 ＝ 累計 ${fmt(r.cum / 1e6, 1)} 億 ÷ ${r.mo} 月 × 12 ＝ ${fmt(annualRev / 1e6, 1)} 億${trend}<br>` +
-        `每元營收獲利 ＝ ${f.y}Q${f.q} EPS ${fmt(f.cum)} ÷ 營收 ${fmt(f.rev / 1e6, 1)} 億<br>` +
-        `推估年 EPS ＝ ${fmt(annualRev / 1e6, 1)} 億 × 該比率 ＝ ${fmt(est.raw)} 元` +
-        (est.dil > 1 ? `<br><span class="formula-adj">↳ 再依配股攤薄 ÷ ${fmt(est.dil, 4)} ＝ ${fmt(est.eps)} 元</span>` : "") +
-        `<br>對應價 ＝ ${fmt(est.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
-        `<br><span class="formula-warn">※ 假設今年淨利率與季報一致；毛利率若明顯變動會失準</span>`,
+      labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
+      tag: M().tagRevenue(ym),
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`) +
+             `<span class="basis-src">${M().srcMonth(ym)}</span>`,
+      formula: M().f.revFormula(r.cum / 1e6, r.mo, annualRev / 1e6, trend, f.y, f.q,
+                                f.cum, f.rev / 1e6, est.raw, est.dil, est.eps, lo, mid, hi),
     };
   }
 
@@ -343,22 +715,15 @@
   function methodPeg(s) {
     const f = QUARTERLY[s.c];
     const est = estimateAnnualEps(s);
-    if (!est) return { na: "缺少季報資料或今年累計為虧損，無法推估成長率。" };
+    if (!est) return { na: M().f.pegNoData };
 
     const h = QHISTORY[s.c] || {};
     const key = `${f.y - 1}/4`;
     const prev = h[key] && h[key].e;
-    if (!prev) {
-      return { na: `缺少 ${f.y - 1} 年度全年每股盈餘，無法計算成長率（本站每日累積歷年財報）。` };
-    }
-    if (prev <= 0) {
-      return { na: `${f.y - 1} 年度為虧損（每股 ${fmt(prev)} 元），由虧轉盈的成長率沒有意義，此法不適用。` };
-    }
+    if (!prev) return { na: M().f.pegNoPrev(f.y - 1) };
+    if (prev <= 0) return { na: M().f.pegPrevLoss(f.y - 1, prev) };
     const gRaw = (est.eps / prev - 1) * 100;
-    if (gRaw <= 0) {
-      return { na: `預估今年 EPS ${fmt(est.eps)} 元低於去年 ${fmt(prev)} 元` +
-                   `（衰退 ${fmt(Math.abs(gRaw), 1)}%），PEG 不適用於獲利衰退的公司。` };
-    }
+    if (gRaw <= 0) return { na: M().f.pegShrink(est.eps, prev, Math.abs(gRaw)) };
     // 成長率設上限，避免基期過低時算出離譜的目標本益比
     const g = Math.min(gRaw, params.gCap);
     const capped = gRaw > params.gCap;
@@ -366,16 +731,13 @@
       cheap: est.eps * g * params.pegLo,
       fair: est.eps * g * params.pegMid,
       rich: est.eps * g * params.pegHi,
-      labels: [`PEG ${fmt(params.pegLo, 2)}`, `PEG ${fmt(params.pegMid, 2)}`, `PEG ${fmt(params.pegHi, 2)}`],
-      tag: `成長 ${fmt(g, 0)}%`,
-      basis: `<span class="basis-tag">參數</span>目標 PEG ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
-             `<span class="basis-src">對比 ${f.y - 1} 年度</span>`,
-      formula:
-        `成長率 ＝ 預估今年 ${fmt(est.eps)} ÷ ${f.y - 1} 年 ${fmt(prev)} − 1 ＝ ${fmt(gRaw, 1)}%` +
-        (capped ? `<br><span class="formula-adj">↳ 超過上限，以 ${fmt(params.gCap, 0)}% 計算</span>` : "") +
-        `<br>對應本益比 ＝ 成長率 ${fmt(g, 1)} × 目標 PEG<br>` +
-        `對應價 ＝ ${fmt(est.eps)} × ${fmt(g, 1)} × ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
-        `<br><span class="formula-warn">※ 以單一年度成長率外推，景氣循環股容易高估</span>`,
+      labels: [M().labelPeg(params.pegLo), M().labelPeg(params.pegMid), M().labelPeg(params.pegHi)],
+      tag: M().tagGrowth(g),
+      basis: `<span class="basis-tag">${M().tagInputs}</span>` +
+             M().f.pegBasis(params.pegLo, params.pegMid, params.pegHi) +
+             `<span class="basis-src">${M().srcPrevYear(f.y - 1)}</span>`,
+      formula: M().f.pegFormula(est.eps, f.y - 1, prev, gRaw, capped, params.gCap, g,
+                                params.pegLo, params.pegMid, params.pegHi),
     };
   }
 
@@ -388,35 +750,23 @@
    */
   function methodPs(s) {
     const r = REVENUE[s.c], f = QUARTERLY[s.c];
-    if (!r) {
-      return { na: "月營收彙總表未收錄本檔（金融保險業沒有可比的營收概念）。" };
-    }
-    if (!f || !(f.rev > 0) || !f.ni) {
-      return { na: "缺少季報營收或淨利，無法反推每股營收。" };
-    }
+    if (!r) return { na: M().f.psNoTable };
+    if (!f || !(f.rev > 0) || !f.ni) return { na: M().f.psNoQuarter };
     const perShare = f.cum / f.ni;        // = 1 / 股數，虧損時分子分母同號仍為正
-    if (!(perShare > 0)) {
-      return { na: "季報每股盈餘與淨利符號不一致，資料異常，此法略過。" };
-    }
+    if (!(perShare > 0)) return { na: M().f.psBadSign };
     const annualRev = (r.cum / r.mo) * 12;
     const sps = annualRev * perShare;
-    if (!(sps > 0)) return { na: "推估每股營收非正值。" };
+    if (!(sps > 0)) return { na: M().f.psNotPositive };
 
     const [lo, mid, hi] = [params.psLo, params.psMid, params.psHi];
     const cur = s.p / sps;
     return {
       cheap: sps * lo, fair: sps * mid, rich: sps * hi,
-      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
-      tag: `目前 ${fmt(cur)} 倍`,
-      basis: `<span class="basis-tag">固定倍數</span>${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
-             `<span class="basis-src">每股營收 ${fmt(sps)} 元</span>`,
-      formula:
-        `每股營收 ＝ 推估年營收 ${fmt(annualRev / 1e6, 1)} 億 × (${f.y}Q${f.q} EPS ${fmt(f.cum)} ÷ 淨利 ${fmt(f.ni / 1e6, 1)} 億)<br>` +
-        `　　　　　＝ ${fmt(sps)} 元　目前股價營收比 ${fmt(cur)} 倍<br>` +
-        `對應價 ＝ ${fmt(sps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
-        `<br><span class="formula-warn">※ 合理倍數因產業而異極大（軟體可達 5~10 倍、通路常低於 0.5 倍）。` +
-        `因為沒有一組通用預設值，本法<b>預設不納入綜合評估</b> —— 請先依同業水準` +
-        `調整上方參數，再勾選納入。它的價值在於營收恆為正，虧損公司也估得出來。</span>`,
+      labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
+      tag: M().tagCurrent(cur),
+      basis: `<span class="basis-tag">${M().tagFixed}</span>${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}` +
+             `<span class="basis-src">${M().srcSps(sps)}</span>`,
+      formula: M().f.psFormula(annualRev / 1e6, f.y, f.q, f.cum, f.ni / 1e6, sps, cur, lo, mid, hi),
     };
   }
 
@@ -433,45 +783,34 @@
   function methodGraham(s) {
     const est = estimateAnnualEps(s);
     const eps = est ? est.eps : s.eps;
-    if (!eps || eps <= 0) {
-      return { na: "缺少可用的每股盈餘（公司虧損），或你尚未在參數區輸入自訂 EPS。" };
-    }
+    if (!eps || eps <= 0) return { na: M().f.grahamNoEps };
     const g = params.grahamG, span = params.grahamSpan;
     const gs = [g - span, g, g + span];
     // (8.5 + 2g) 在 g < −4.25 時會變成負數，夾住避免出現負價格
     const mult = gs.map((x) => Math.max(8.5 + 2 * x, 0.5));
-    const src = est ? (est.custom ? "你輸入的 EPS"
-                                  : (est.src === "營收" ? "月營收推估" : "季報年化"))
-                    : "近四季 EPS";
+    const src = est ? (est.custom ? M().tagCustomEps
+                                  : (est.src === "rev" ? M().epsSrcRevenue : M().epsSrcQuarter))
+                    : M().epsSrcTtm;
     return {
       cheap: eps * mult[0], fair: eps * mult[1], rich: eps * mult[2],
-      labels: gs.map((x) => `g ${fmt(x, 1)}%`),
-      tag: `g ${fmt(g, 1)}%`,
-      basis: `<span class="basis-tag">你的參數</span>成長率 g ${fmt(g, 1)}%（±${fmt(span, 1)}%）` +
-             `<span class="basis-src">EPS ${fmt(eps)} 元 · ${src}</span>`,
-      formula:
-        `葛拉漢公式　V ＝ EPS × (8.5 + 2g)<br>` +
-        `代入 g ＝ ${fmt(gs[0], 1)} / ${fmt(g, 1)} / ${fmt(gs[2], 1)}%　→　` +
-        `倍數 ${fmt(mult[0])} / ${fmt(mult[1])} / ${fmt(mult[2])}<br>` +
-        `V ＝ ${fmt(eps)} × 各倍數` +
-        `<br><span class="formula-warn">※ 8.5 為葛拉漢 1962 年提出的零成長基準本益比，` +
-        `成長率 g 完全由你設定；此式未考慮利率環境，原著另有以公司債殖利率調整的版本</span>`,
+      labels: gs.map((x) => M().labelG(x)),
+      tag: M().tagGraham(g),
+      basis: `<span class="basis-tag">${M().tagYours}</span>${M().f.grahamBasis(g, span)}` +
+             `<span class="basis-src">${M().srcEps(eps, src)}</span>`,
+      formula: M().f.grahamFormula(gs[0], g, gs[2], mult[0], mult[1], mult[2], eps),
     };
   }
 
   /* 4. 本益比法 —— 近四季 EPS × 你選定的本益比倍數 */
   function methodPe(s) {
-    if (!s.eps) return { na: "來源未提供本益比（通常代表近四季為虧損），本益比法不適用。" };
+    if (!s.eps) return { na: M().f.peNoData };
     const b = usable(s, "pe");
     const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
     return {
       cheap: s.eps * lo, fair: s.eps * mid, rich: s.eps * hi,
-      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
-      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`),
-      formula:
-        `近四季 EPS ＝ 收盤價 ${fmt(s.p)} ÷ 本益比 ${fmt(s.pe)} ＝ ${fmt(s._rawEps || s.eps)} 元` +
-        dilutionNote(s) +
-        `<br>對應價 ＝ ${fmt(s.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+      labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`),
+      formula: M().f.peFormula(s.p, s.pe, s._rawEps || s.eps, dilutionNote(s), s.eps, lo, mid, hi),
     };
   }
 
@@ -482,30 +821,31 @@
     return (b && b[key] && b[key].length === 3) ? b[key] : null;
   }
   function basisTag(band, txt) {
-    return band
-      ? `<span class="basis-tag">近 5 年區間</span>${txt}`
-      : `<span class="basis-tag">固定倍數</span>${txt}`;
+    return `<span class="basis-tag">${band ? M().tagBands : M().tagFixed}</span>${txt}`;
   }
 
   // 依估價基礎分組：本益比家族 → 淨值類 → 營收類 → 股利類
-  const PRO_COLS = ["便宜價", "合理價", "昂貴價"];
   /** 專業版顯示價位名稱，計算版顯示參數本身（如「15.94 倍」）。 */
   function colLabel(res, i) {
-    if (isPro) return PRO_COLS[i];
-    return (res.labels || ["低", "中", "高"])[i];
+    if (isPro) return M().proCols[i];
+    return (res.labels || [M().colLo, M().colMid, M().colHi])[i];
   }
 
+  // 名稱與副標由字典提供（MSG.*.names）；en 欄是卡片右側那行固定的英文學名，
+  // 中文介面下當副標，英文介面下就是標題本身，所以只在中文介面顯示。
   const METHODS = [
-    { id: "pefwd", name: "本益比法", tag: "年化 EPS", en: "Forward P/E", fn: methodPeFwd },
-    { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
-    { id: "peg", name: "本益成長比", en: "PEG Ratio", fn: methodPeg },
-    { id: "rev", name: "月營收動能法", en: "Revenue Momentum", fn: methodRevenue },
-    { id: "graham", name: "葛拉漢公式", en: "Graham Formula", fn: methodGraham },
-    { id: "roe", name: "ROE 法", en: "Return on Equity", fn: methodRoe },
-    { id: "pb", name: "股價淨值比法", en: "P/B Ratio", fn: methodPb },
-    { id: "ps", name: "股價營收比", en: "P/S Ratio", fn: methodPs },
-    { id: "div", name: "股利法", en: "Dividend", fn: methodDiv },
+    { id: "pefwd", en: "Forward P/E", fn: methodPeFwd },
+    { id: "pe", en: "Trailing P/E", fn: methodPe },
+    { id: "peg", en: "PEG Ratio", fn: methodPeg },
+    { id: "rev", en: "Revenue Momentum", fn: methodRevenue },
+    { id: "graham", en: "Graham Formula", fn: methodGraham },
+    { id: "roe", en: "Return on Equity", fn: methodRoe },
+    { id: "pb", en: "P/B Ratio", fn: methodPb },
+    { id: "ps", en: "P/S Ratio", fn: methodPs },
+    { id: "div", en: "Dividend", fn: methodDiv },
   ];
+  /** 市場別（上市／上櫃）是資料值，顯示時才轉語言 */
+  const mkt = (m) => (M().market[m] || m);
 
   // ═══════════════════════════════════════════════════════
   //  渲染
@@ -516,16 +856,16 @@
 
     el.sName.textContent = s.n;
     el.sCode.textContent = s.c;
-    el.sMarket.textContent = s.m;
-    el.sDate.textContent = "收盤 " + (s._date || "—");
+    el.sMarket.textContent = mkt(s.m);
+    el.sDate.textContent = M().closeOn(s._date || "—");
     el.sPrice.textContent = fmt(s.p);
-    el.sEps.textContent = s.eps ? fmt(s.eps) + " 元" : "—";
-    el.sBvps.textContent = s.bvps ? fmt(s.bvps) + " 元" : "—";
+    el.sEps.textContent = s.eps ? nt(s.eps) : "—";
+    el.sBvps.textContent = s.bvps ? nt(s.bvps) : "—";
     renderDilution(s);
     el.sRoe.textContent = s.roe ? fmt(s.roe) + " %" : "—";
-    el.sDps.textContent = s.d ? fmt(s.d) + " 元" : "—";
-    el.sPe.textContent = s.pe ? fmt(s.pe) + " 倍" : "—";
-    el.sPb.textContent = s.pb ? fmt(s.pb) + " 倍" : "—";
+    el.sDps.textContent = s.d ? nt(s.d) : "—";
+    el.sPe.textContent = s.pe ? fmt(s.pe) + X() : "—";
+    el.sPb.textContent = s.pb ? fmt(s.pb) + X() : "—";
     el.sY.textContent = s.y ? fmt(s.y) + " %" : "—";
     el.sFq.textContent = s.fq || "—";
 
@@ -542,8 +882,8 @@
         <div class="method-head">
           ${res.na ? "" :
             `<input type="checkbox" class="method-toggle" data-m="${m.id}" ${on ? "checked" : ""}
-                    aria-label="是否納入綜合評估">`}
-          <h3>${m.name}${(res.tag || m.tag) ? `<span class="m-tag">${res.tag || m.tag}</span>` : ""}<span class="m-en">${m.en}</span></h3>
+                    aria-label="${M().includeAria}">`}
+          <h3>${M().names[m.id][0]}${(res.tag || M().names[m.id][1]) ? `<span class="m-tag">${res.tag || M().names[m.id][1]}</span>` : ""}${L() === "en" ? "" : `<span class="m-en">${m.en}</span>`}</h3>
         </div>
         ${res.na
           ? `<p class="method-basis">—</p><p class="method-na">⚠︎ ${res.na}</p>`
@@ -578,24 +918,13 @@
 
     const parts = [];
     if (a.factor > 1) {
-      const list = a.known.map((e) =>
-        `<b>${e.d}</b> 配股 <b>${fmt(e.k * 100, 1)}%</b>`).join("、");
-      parts.push(
-        `本檔於 ${list}。交易所公布的本益比與股價淨值比在除權後，是用已稀釋的股價
-         除以尚未按新股本重算的每股盈餘，因此本站已把 EPS 與每股淨值除以
-         <b>${fmt(a.factor, 4)}</b> 還原成攤薄後的數字
-         （EPS ${fmt(s._rawEps)} → <b>${fmt(s.eps)}</b>，
-         每股淨值 ${fmt(s._rawBvps)} → <b>${fmt(s.bvps)}</b>）。`);
+      const list = a.known.map((e) => M().dilutionEvent(e.d, e.k)).join(M().listSep);
+      parts.push(M().dilutionMain(list, a.factor, s._rawEps, s.eps, s._rawBvps, s.bvps));
     }
     if (a.unknown.length) {
-      parts.push(
-        `另有 ${a.unknown.map((e) => e.d).join("、")} 的<b>權息</b>（同日配股又配息），
-         公開資料無法把配股率與現金股利分離，<b>這部分未修正</b>，
-         實際對應價可能再低一些。`);
+      parts.push(M().dilutionUnknown(a.unknown.map((e) => e.d).join(M().listSep)));
     }
-    if (a.approx) {
-      parts.push(`上櫃來源未提供財報基準季，此處以近 150 天內是否除權作近似判斷。`);
-    }
+    if (a.approx) parts.push(M().dilutionApprox);
     box.innerHTML = `<span class="dn-ico">⚖︎</span><div>${parts.join("<br><br>")}</div>`;
     box.hidden = false;
   }
@@ -621,17 +950,15 @@
     el.tCheap.textContent = fmt(cheap);
     el.tFair.textContent = fmt(fair);
     el.tRich.textContent = fmt(rich);
-    el.gScaleL.innerHTML = "<i>便宜</i> <b>" + fmt(cheap) + "</b>";
-    el.gScaleM.innerHTML = "<i>合理</i> <b>" + fmt(fair) + "</b>";
-    el.gScaleR.innerHTML = "<i>昂貴</i> <b>" + fmt(rich) + "</b>";
+    el.gScaleL.innerHTML = `<i>${M().scaleCheap}</i> <b>${fmt(cheap)}</b>`;
+    el.gScaleM.innerHTML = `<i>${M().scaleFair}</i> <b>${fmt(fair)}</b>`;
+    el.gScaleR.innerHTML = `<i>${M().scaleRich}</i> <b>${fmt(rich)}</b>`;
     el.gaugePrice.textContent = fmt(s.p);
 
     if (cheap === null || !(cheap < rich)) {
       el.gaugeMark.style.left = "50%";
       el.verdict.className = "verdict";
-      el.verdict.textContent = used.length
-        ? "各公式結果差異過大或參數異常，無法整合出位階，請看下方個別公式。"
-        : "目前沒有任何公式可計算（多半是虧損且不配息），或所有公式都被取消勾選。";
+      el.verdict.textContent = used.length ? M().proNoRank : M().proNone;
       return;
     }
 
@@ -649,40 +976,29 @@
     const diff = Math.abs(s.p - cheap);
 
     let cls, head, action;
+    const gap = Math.abs(gapToCheap), vs = Math.abs(vsFair);
     if (s.p < cheap) {
       cls = "is-cheap";
-      head = `現價 <b>${fmt(s.p)}</b> 元已<b>低於便宜價 ${fmt(cheap)}</b> 元 ` +
-             `(低 ${fmt(Math.abs(gapToCheap), 1)}%)`;
-      action = `<b>符合進場條件</b>　依上述規則，現價落在「進場區」。`;
+      head = M().proHeadCheap(s.p, cheap, gap);
+      action = M().proActEnter;
     } else if (s.p < fair) {
       cls = "is-nearby";
-      head = `現價 <b>${fmt(s.p)}</b> 元位於便宜價與合理價之間，${vsFair >= 0 ? "高" : "低"}於合理價 ${fmt(Math.abs(vsFair), 1)}%`;
-      action = `<b>接近進場</b>　距便宜價 ${fmt(cheap)} 元還差 ` +
-               `<b>${fmt(diff)} 元（${fmt(Math.abs(gapToCheap), 1)}%）</b>。`;
+      head = M().proHeadNearby(s.p, vsFair >= 0, vs);
+      action = M().proActNear(cheap, diff, gap);
     } else if (s.p < rich) {
       cls = "is-fair";
-      head = `現價 <b>${fmt(s.p)}</b> 元位於合理價與昂貴價之間，高於合理價 ${fmt(Math.abs(vsFair), 1)}%`;
-      action = `<b>偏高</b>　距便宜價 ${fmt(cheap)} 元還差 ` +
-               `<b>${fmt(diff)} 元（${fmt(Math.abs(gapToCheap), 1)}%）</b>。`;
+      head = M().proHeadFair(s.p, vs);
+      action = M().proActHigh(cheap, diff, gap);
     } else {
       cls = "is-rich";
-      head = `現價 <b>${fmt(s.p)}</b> 元已<b>高於昂貴價 ${fmt(rich)}</b> 元，高於合理價 ${fmt(Math.abs(vsFair), 1)}%`;
-      action = `<b>過熱</b>　距便宜價 ${fmt(cheap)} 元還差 ` +
-               `<b>${fmt(diff)} 元（${fmt(Math.abs(gapToCheap), 1)}%）</b>。`;
+      head = M().proHeadRich(s.p, rich, vs);
+      action = M().proActHot(cheap, diff, gap);
     }
-
-    const thin = used.length <= 2
-      ? `<span class="verdict-thin">⚠︎ 目前只有 ${used.length} 種公式可計算，
-         三個價位等同單一模型的輸出，位階判定沒有參考意義。</span>`
-      : "";
 
     el.verdict.className = "verdict " + cls;
     el.verdict.innerHTML =
-      `${head}。<br>${action}` +
-      `<span class="verdict-note">位階由 ${used.length} 種公式各欄的中位數比對而得，
-       門檻即上方三個價位，改「計算參數」就會改變。這是機械式的規則判定，
-       不預測股價、不考慮產業前景與個人財務狀況，<b>不構成投資建議</b>。</span>` +
-      thin;
+      `${head}${pick("。", ".")}<br>${action}` + M().proNote(used.length) +
+      (used.length <= 2 ? M().proThin(used.length) : "");
   }
 
   /* 計算值彙總
@@ -709,17 +1025,15 @@
     el.tFair.textContent = fmt(md);
     el.tRich.textContent = fmt(hi);
     // <i> 內的文字在窄螢幕會被 CSS 隱藏，只留數字避免三個刻度擠在一起
-    el.gScaleL.innerHTML = "<i>最小</i> <b>" + fmt(lo) + "</b>";
-    el.gScaleM.innerHTML = "<i>中位數</i> <b>" + fmt(md) + "</b>";
-    el.gScaleR.innerHTML = "<i>最大</i> <b>" + fmt(hi) + "</b>";
+    el.gScaleL.innerHTML = `<i>${M().scaleMin}</i> <b>${fmt(lo)}</b>`;
+    el.gScaleM.innerHTML = `<i>${M().scaleMid}</i> <b>${fmt(md)}</b>`;
+    el.gScaleR.innerHTML = `<i>${M().scaleMax}</i> <b>${fmt(hi)}</b>`;
     el.gaugePrice.textContent = fmt(s.p);
 
     if (!all.length || !(lo < hi)) {
       el.gaugeMark.style.left = "50%";
       el.verdict.className = "verdict";
-      el.verdict.textContent = used.length
-        ? "目前納入的公式只產生單一數值，無法做分佈統計，請直接看下方各公式的計算結果。"
-        : "目前沒有任何公式可計算（多數公式需要獲利或股利為正），或所有公式都被取消勾選。";
+      el.verdict.textContent = used.length ? M().sumSingle : M().sumNone;
       return;
     }
 
@@ -732,21 +1046,11 @@
     const vsMd = (s.p / md - 1) * 100;
 
     el.verdict.className = "verdict";
+    const psHint = (results.ps && !results.ps.na && offMethods.has("ps")) ? M().psHint : "";
     el.verdict.innerHTML =
-      `現價 <b>${fmt(s.p)}</b> 元。目前納入 <b>${used.length}</b> 種公式、
-       共 <b>${all.length}</b> 個計算值，範圍 <b>${fmt(lo)}</b> ～ <b>${fmt(hi)}</b> 元，
-       中位數 <b>${fmt(md)}</b> 元。<br>
-       現價高於其中 <b>${fmt(pctBelow, 0)}%</b> 的計算值，
-       與中位數相差 <b>${vsMd >= 0 ? "+" : "−"}${fmt(Math.abs(vsMd), 1)}%</b>。
-       <span class="verdict-note">以上為敘述統計，計算值取決於你在「計算參數」中設定的倍數與假設，
-       本站不對這些數值作任何評價，也不構成買賣建議。</span>` +
-      (used.length <= 2
-        ? `<span class="verdict-thin">⚠︎ 目前只有 ${used.length} 種公式可計算（多數需要獲利為正），
-           統計量等同單一模型的輸出，離散程度沒有參考意義。
-           ${results.ps && !results.ps.na && offMethods.has("ps")
-              ? "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 依同業設定倍數後可勾選納入。"
-              : ""}</span>`
-        : "");
+      M().verdict(s.p, used.length, all.length, lo, hi, md, pctBelow,
+                  vsMd >= 0 ? "+" : "−", Math.abs(vsMd)) +
+      (used.length <= 2 ? M().verdictThin(used.length, psHint) : "");
   }
 
   // ═══════════════════════════════════════════════════════
@@ -787,7 +1091,7 @@
       const q = (kw || "").trim();
       if (!q) { el.suggest.hidden = true; return; }
       el.suggest.innerHTML =
-        `<li class="no-hit">找不到「${q}」——請輸入股票代號或公司名稱</li>`;
+        `<li class="no-hit">${M().noHit(q)}</li>`;
       el.suggest.hidden = false;
       return;
     }
@@ -795,7 +1099,7 @@
       <li data-code="${s.c}">
         <span class="s-code">${s.c}</span>
         <span class="s-name">${s.n}</span>
-        <span class="s-meta">${s.m}　${fmt(s.p)} 元</span>
+        <span class="s-meta">${mkt(s.m)}　${fmt(s.p)}</span>
       </li>`).join("");
     el.suggest.hidden = false;
     el.suggest.querySelectorAll("li[data-code]").forEach((li) =>
@@ -820,6 +1124,7 @@
   //  資料載入
   // ═══════════════════════════════════════════════════════
   let TRADE_DATE = {};   // { 上市: "YYYY-MM-DD", 上櫃: "YYYY-MM-DD" }
+  let LAST_DATE = "";    // 兩市場中較新的那個資料日，切語言時要重新顯示
 
   function ingest(payload) {
     STOCKS = payload.stocks;
@@ -827,9 +1132,9 @@
     TRADE_DATE = payload.trade_date || {};
     STOCKS.forEach((s) => (s._date = TRADE_DATE[s.m] || payload.updated_at || ""));
     const dates = [...new Set(Object.values(TRADE_DATE).filter(Boolean))].sort();
-    el.dataDate.textContent = dates.length
-      ? "資料日 " + dates[dates.length - 1] : "資料日 —";
-    el.dataCount.textContent = `${payload.count || STOCKS.length} 檔上市櫃個股`;
+    LAST_DATE = dates.length ? dates[dates.length - 1] : "";
+    el.dataDate.textContent = LAST_DATE ? M().dataDate(LAST_DATE) : M().dataDateNone;
+    el.dataCount.textContent = M().count(payload.count || STOCKS.length);
   }
 
   async function boot() {
@@ -860,10 +1165,7 @@
       if (hash && INDEX.has(hash)) select(hash);
     } catch (err) {
       el.loading.hidden = true;
-      showError("讀不到股價資料",
-        `無法載入 <code>data/latest.json</code>（${err.message}）。<br>
-         若是在本機直接以檔案開啟網頁，瀏覽器會擋下讀取，請改用
-         <code>python3 -m http.server</code> 起一個本機伺服器再瀏覽。`);
+      showError(M().loadFailTitle, M().loadFail(err.message));
     }
   }
 
@@ -950,9 +1252,7 @@
     btn.disabled = false; btn.classList.remove("busy");
 
     if (!twseRows.length && !tpexRows.length) {
-      showError("即時更新失敗",
-        `瀏覽器受同源政策限制無法直接連線交易所，本站改走公共 CORS 代理，
-         而代理此刻沒有回應。<br>頁面仍在使用每日自動更新的資料，功能不受影響。`);
+      showError(M().refreshFailTitle, M().refreshFail);
       return;
     }
 
@@ -989,19 +1289,19 @@
     // 不需要拿警告去嚇人——那只是「本來就已經是最新的，不必更新」。
     const newest = [twseDate, tpexDate].filter(Boolean).sort().pop();
     const stale = failed.filter((m) => TRADE_DATE[m] && newest && TRADE_DATE[m] < newest);
-    const total = done.map((m) => `${m} ${m === "上市" ? twseRows.length : tpexRows.length} 檔`);
+    const sep = M().listSep;
+    const total = done.map((m) =>
+      M().marketCount(mkt(m), m === "上市" ? twseRows.length : tpexRows.length)).join(sep);
 
     if (!stale.length) {
-      showNote("ok", "已是最新資料",
+      showNote("ok", M().upToDateTitle,
         failed.length
-          ? `重新抓取了${total.join("、")}，${failed.join("、")}原本就已經是 ${newest}
-             的收盤資料，不需要更新。全站 ${STOCKS.length} 檔都是最新的。`
-          : `已更新 ${total.join("、")}，資料日 ${newest}。`);
+          ? M().upToDateSome(total, failed.map(mkt).join(sep), newest, STOCKS.length)
+          : M().upToDateAll(total, newest));
     } else {
-      showNote("warn", `${stale.join("、")}沒有更新到`,
-        `已重新抓取${total.join("、")}（${newest}）；<b>${stale.join("、")}</b>的代理連線失敗，
-         仍顯示每日排程抓到的 ${stale.map((m) => TRADE_DATE[m]).join("、")} 資料。
-         這些數字本身是正確的，只是日期較舊。`);
+      showNote("warn", M().staleTitle(stale.map(mkt).join(sep)),
+        M().staleBody(total, newest, stale.map(mkt).join(sep),
+                      stale.map((m) => TRADE_DATE[m]).join(sep)));
     }
   }
 
@@ -1097,6 +1397,14 @@
       const dark = document.documentElement.dataset.theme === "dark";
       document.documentElement.dataset.theme = dark ? "light" : "dark";
       localStorage.setItem("fv_theme", dark ? "light" : "dark");
+    });
+    // 語言一換，程式產生的文字全部要重來：頂列、九張公式卡、彙總敘述
+    document.addEventListener("langchange", () => {
+      if (LAST_DATE || STOCKS.length) {
+        el.dataDate.textContent = LAST_DATE ? M().dataDate(LAST_DATE) : M().dataDateNone;
+        el.dataCount.textContent = M().count(STOCKS.length);
+      }
+      if (current) render();
     });
     addEventListener("hashchange", () => {
       const h = decodeURIComponent(location.hash.replace("#", "")).trim();
