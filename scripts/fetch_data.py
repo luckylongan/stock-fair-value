@@ -13,6 +13,7 @@
 
 import json
 import os
+import re
 import ssl
 import sys
 import time
@@ -193,6 +194,64 @@ def fetch_tpex():
 
 
 # --------------------------------------------------------------------------
+# 在外流通股數與實收資本額（股本）
+#
+# 台股的交易所每天公布本益比與股價淨值比，估價本身用不到股數 —— 每股數字
+# 直接除得出來。但「市值」與「股本」是理解一家公司規模的基本資訊，而且
+# 台股習慣用股本大小分類個股（小型股、大型股），所以另外抓一次。
+#
+#   上市：t187ap03_L 直接給「已發行普通股數」，涵蓋率 100%。
+#   上櫃：只給實收資本額與面額，股數 = 實收資本額 ÷ 面額。
+#
+# 面額不是每檔都 10 元 —— 2014 年放寬後有 5 元、1 元、0.5 元的個股，
+# 外國企業（F 股）甚至以美元計價，所以一定要照實解析面額，不能寫死 10。
+# --------------------------------------------------------------------------
+TWSE_INFO = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+TPEX_INFO = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
+
+
+def parse_par(text):
+    """'新台幣  10.0000元' -> 10.0；非新台幣計價回 None（換算需要匯率）。"""
+    s = str(text or "").strip()
+    if not s:
+        return None
+    if "新台幣" not in s and "NTD" not in s.upper():
+        # 美元計價的 F 股，用面額換算股數會錯一個匯率
+        if any(c.isalpha() or "\u4e00" <= c <= "\u9fff" for c in s.replace("元", "")):
+            return None
+    m = re.search(r"(\d+(?:\.\d+)?)", s.replace(",", ""))
+    return float(m.group(1)) if m and float(m.group(1)) > 0 else None
+
+
+def fetch_shares():
+    """回傳 {代號: (在外流通股數, 實收資本額)}。"""
+    out = {}
+    tw = fetch_json(TWSE_INFO)
+    for r in (tw or []):
+        code = str(r.get("公司代號", "")).strip()
+        if not is_common_stock(code):
+            continue
+        sh = num(r.get("已發行普通股數或TDR原股發行股數"))
+        cap = num(r.get("實收資本額"))
+        if sh:
+            out[code] = (sh, cap)
+    print("   上市 %d 檔（官方直接提供股數）" % len(out))
+
+    tp = fetch_json(TPEX_INFO)
+    n = 0
+    for r in (tp or []):
+        code = str(r.get("SecuritiesCompanyCode", "")).strip()
+        if not is_common_stock(code) or code in out:
+            continue
+        cap = num(r.get("Paidin.Capital.NTDollars"))
+        par = parse_par(r.get("ParValueOfCommonStock"))
+        if cap and par:
+            out[code] = (cap / par, cap)
+            n += 1
+    print("   上櫃 %d 檔（實收資本額 ÷ 面額）" % n)
+    return out
+
+
 def enrich(rows):
     """由 收盤價 / 本益比 / 股價淨值比 / 殖利率 推算估價所需的每股財務數字。
 
@@ -213,6 +272,22 @@ def enrich(rows):
         official = r.get("d")
         r["d"] = round(p * y / 100, 4) if (p and y) else (
             round(official, 4) if official else None)
+    return rows
+
+
+def attach_shares(rows, shares):
+    """把股數、股本與市值掛上去。金額一律以百萬元存，JSON 才不會被一堆
+    12 位數的整數撐大。"""
+    for r in rows:
+        hit = shares.get(r["c"])
+        if not hit:
+            continue
+        sh, cap = hit
+        r["sh"] = round(sh / 1e6, 3)                       # 百萬股
+        if cap:
+            r["cap"] = round(cap / 1e6, 2)                 # 百萬元
+        if r.get("p"):
+            r["mc"] = round(r["p"] * sh / 1e6, 2)          # 百萬元
     return rows
 
 
@@ -251,7 +326,10 @@ def main():
             d2 = old_td.get("上櫃")
             print("   ! 上櫃抓取失敗，沿用 %s 的 %d 檔" % (d2, len(tpex)), file=sys.stderr)
 
-    rows = enrich(twse + tpex)
+    print("== 抓取在外流通股數與股本 ==")
+    shares = fetch_shares()
+
+    rows = attach_shares(enrich(twse + tpex), shares)
     if not rows:
         print("兩個來源都失敗，保留既有 data/latest.json 不覆蓋。", file=sys.stderr)
         return 1
@@ -270,6 +348,8 @@ def main():
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     print("== 已寫入 %s（%d 檔，%.1f KB）==" % (
         path, len(rows), os.path.getsize(path) / 1024))
+    print("   有股數 %d 檔／有市值 %d 檔"
+          % (sum(1 for r in rows if r.get("sh")), sum(1 for r in rows if r.get("mc"))))
     return 0
 
 

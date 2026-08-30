@@ -52,7 +52,8 @@
   const el = {};
   ["q", "suggest", "clearBtn", "loading", "errorBox", "result", "empty", "methods",
    "sName", "sCode", "sMarket", "sDate", "sPrice", "sEps", "sBvps", "sRoe", "sDps",
-   "sPe", "sPb", "sY", "sFq", "tCheap", "tFair", "tRich", "gaugeMark", "gaugePrice",
+   "sPe", "sPb", "sY", "sFq", "sMc", "sSh", "sCap", "sNi",
+   "tCheap", "tFair", "tRich", "gaugeMark", "gaugePrice",
    "gScaleL", "gScaleM", "gScaleR", "verdict", "dataDate", "dataCount",
    "refreshBtn", "themeBtn", "resetParams", "pUseBands"].forEach((k) => (el[k] = $(k)));
 
@@ -64,6 +65,22 @@
   const pick = (zh, en) => (L() === "en" ? en : zh);
   const X = () => pick(" 倍", "x");          // 倍數單位
   const nt = (v, d = 2) => pick(fmt(v, d) + " 元", "NT$" + fmt(v, d));
+  /** 大數字（原始值的單位是百萬）換成看得懂的級距。中文用億／兆，英文用 B／T ——
+   *  兩邊的進位不一樣（億是 1e8、billion 是 1e9），不能只換單位字。 */
+  const big = (m) => {
+    if (m === null || m === undefined || !isFinite(m)) return "—";
+    const a = Math.abs(m);
+    if (L() === "en") {
+      if (a >= 1e6) return fmt(m / 1e6, 2) + "T";
+      if (a >= 1e3) return fmt(m / 1e3, 1) + "B";
+      return fmt(m, 1) + "M";
+    }
+    if (a >= 1e6) return fmt(m / 1e6, 2) + " 兆";       // 1 兆 = 100 萬個百萬
+    if (a >= 100) return fmt(m / 100, 1) + " 億";        // 1 億 = 100 個百萬
+    return fmt(m, 1) + " 百萬";
+  };
+  const money = (m) => (m === null || m === undefined || !isFinite(m))
+    ? "—" : pick(big(m), "NT$" + big(m));
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const fmt = (v, d = 2) =>
@@ -108,6 +125,7 @@
       srcEps: (e, src) => `EPS ${fmt(e)} 元 · ${src}`,
       epsSrcCustom: "自訂", epsSrcRevenue: "月營收推估",
       epsSrcQuarter: "季報年化", epsSrcTtm: "近四季 EPS",
+      shares: "股",
       dataDate: (d) => `資料日 ${d}`,
       dataDateNone: "資料日 —",
       count: (n) => `${n} 檔上市櫃個股`,
@@ -305,6 +323,7 @@
       srcEps: (e, src) => `EPS NT$${fmt(e)} · ${src}`,
       epsSrcCustom: "your figure", epsSrcRevenue: "from monthly revenue",
       epsSrcQuarter: "annualized from filings", epsSrcTtm: "trailing 12M EPS",
+      shares: "",
       dataDate: (d) => `Data as of ${d}`,
       dataDateNone: "Data as of —",
       count: (n) => `${n} TWSE / TPEx stocks`,
@@ -866,6 +885,15 @@
     el.sDps.textContent = s.d ? nt(s.d) : "—";
     el.sPe.textContent = s.pe ? fmt(s.pe) + X() : "—";
     el.sPb.textContent = s.pb ? fmt(s.pb) + X() : "—";
+    // 股數與股本是另外抓的公司基本資料，估價公式用不到，純粹給規模感
+    if (el.sMc) el.sMc.textContent = s.mc ? money(s.mc) : "—";
+    if (el.sSh) el.sSh.textContent = s.sh ? big(s.sh) + M().shares : "—";
+    if (el.sCap) el.sCap.textContent = s.cap ? money(s.cap) : "—";
+    if (el.sNi) {
+      // 近四季淨利 ＝ 近四季 EPS × 在外流通股數（sh 的單位是百萬股）
+      const ni = (s.eps && s.sh) ? s.eps * s.sh : null;
+      el.sNi.textContent = ni ? money(ni) : "—";
+    }
     el.sY.textContent = s.y ? fmt(s.y) + " %" : "—";
     el.sFq.textContent = s.fq || "—";
 
