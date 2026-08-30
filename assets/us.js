@@ -206,6 +206,26 @@
         `<span class="verdict-thin">⚠︎ 目前只有 ${n} 種公式可計算，
          統計量等同單一模型的輸出，離散程度沒有參考意義。${psHint}</span>`,
       psHint: "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 確認同業倍數後可勾選納入。",
+      ratioNames: { pe: "本益比", pb: "股價淨值比", ps: "股價營收比", pfcf: "股價自由現金流比" },
+      outlier: (above, price, edge, n, w) => {
+        const dir = above ? "高於" : "低於";
+        const edgeName = above ? "最大" : "最小";
+        const head =
+          `<span class="verdict-thin">ⓘ 現價 <b>${fmt(price)}</b> 美元${dir}<b>全部 ${n} 個</b>計算值` +
+          `（${edgeName}值 <b>${fmt(edge)}</b>）。`;
+        const why = w
+          ? `落差主要來自<b>${w.name} ${fmt(w.cur)} 倍</b>，` +
+            (above ? `是同業中位數 ${fmt(w.ref)} 倍的 <b>${fmt(w.k, 1)} 倍</b>。`
+                   : `只有同業中位數 ${fmt(w.ref)} 倍的 <b>1/${fmt(w.k, 1)}</b>。`)
+          : "";
+        const tail =
+          `這九種公式全部建立在<b>已實現的財務數字</b>上，市價若反映的是對未來的預期，` +
+          `公式看不到，落差就會全部顯示在這裡。<br>` +
+          `<b>這不代表資料有誤，也不代表哪一邊才是對的</b> —— ` +
+          `計算值取決於你設定的倍數，市價取決於市場願意付多少。` +
+          `想改用不同的基準，可到「計算參數」關掉同業當前分布，自行輸入倍數。</span>`;
+        return head + why + tail;
+      },
       noHit: (q) => `找不到「${q}」——請輸入美股代號或公司名稱（英文）`,
       loadFail: (m) =>
         `<b>讀不到美股資料</b>無法載入 <code>data/us.json</code>（${m}）。<br>
@@ -383,6 +403,28 @@
          now, so these statistics amount to the output of a single model and the spread means
          nothing. ${psHint}</span>`,
       psHint: "<b>Price / sales</b> is computable for this stock but excluded by default — tick it in once you have checked the peer multiple.",
+      ratioNames: { pe: "P/E", pb: "P/B", ps: "P/S", pfcf: "P/FCF" },
+      outlier: (above, price, edge, n, w) => {
+        const dir = above ? "above" : "below";
+        const edgeName = above ? "highest" : "lowest";
+        const head =
+          `<span class="verdict-thin">ⓘ The current price of <b>$${fmt(price)}</b> is ${dir} ` +
+          `<b>all ${n}</b> computed values (${edgeName}: <b>${fmt(edge)}</b>). `;
+        const why = w
+          ? `The gap comes mainly from <b>${w.name} at ${fmt(w.cur)}x</b>, ` +
+            (above ? `which is <b>${fmt(w.k, 1)}×</b> the sector median of ${fmt(w.ref)}x. `
+                   : `which is <b>1/${fmt(w.k, 1)}</b> of the sector median of ${fmt(w.ref)}x. `)
+          : "";
+        const tail =
+          `All nine formulas are built on <b>realised financial figures</b>. If the market price ` +
+          `reflects expectations about the future, the formulas cannot see that, and the whole ` +
+          `difference shows up here.<br>` +
+          `<b>This does not mean the data is wrong, nor that either side is right</b> — the computed ` +
+          `values depend on the multiples you set, and the market price depends on what buyers will ` +
+          `pay. To use a different basis, turn off the sector distribution under "Assumptions" and ` +
+          `enter your own multiples.</span>`;
+        return head + why + tail;
+      },
       noHit: (q) => `No match for "${q}" — enter a US ticker or company name`,
       loadFail: (m) =>
         `<b>Could not load US market data</b> Failed to fetch <code>data/us.json</code> (${m}).<br>
@@ -604,6 +646,7 @@
       cheap: s.eps * lo, fair: s.eps * mid, rich: s.eps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`, s, "pe"),
+      cur: s.pe, ref: mid, ratio: "pe",
       formula:
         (f && f.n ? M().f.peRebuilt(lbl(f.fyl), f.fy, f.ytd, s.eps)
                   : M().f.peFromFy(lbl((f || {}).fyl), s.eps)) +
@@ -669,6 +712,7 @@
       cheap: s.fcfps * lo, fair: s.fcfps * mid, rich: s.fcfps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       tag: `${lbl(s.fcfl)}`,
+      cur: s.pfcf, ref: mid, ratio: "pfcf",
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`, s, "pfcf") +
              `<span class="basis-src">${M().srcFcfps(s.fcfps)}</span>`,
       formula: M().f.fcfFormula(money(s.fcf), lbl(s.fcfl), shares(s.sh), s.fcfps, s.pfcf, lo, mid, hi),
@@ -729,6 +773,7 @@
       cheap: s.bvps * lo, fair: s.bvps * mid, rich: s.bvps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`, s, "pb"),
+      cur: s.pb, ref: mid, ratio: "pb",
       formula: M().f.pbFormula(money(s.eq), shares(s.sh), s.bvps, lo, mid, hi),
     };
   }
@@ -742,6 +787,7 @@
       cheap: s.sps * lo, fair: s.sps * mid, rich: s.sps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       tag: M().tagCurrent(s.ps),
+      cur: s.ps, ref: mid, ratio: "ps",
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`, s, "ps") +
              `<span class="basis-src">${M().srcSps(s.sps)}</span>`,
       formula: M().f.psFormula(money(s.rev), shares(s.sh), s.sps, lo, mid, hi),
@@ -925,6 +971,31 @@
     return update;
   }
 
+  /* 現價落在所有計算值之外時的說明
+   *
+   * 這種情況（例如獲利大幅衰退但股價還在高檔）畫面上會出現一整排遠低於現價
+   * 的數字，第一眼很像資料抓錯。與其讓使用者自己猜，直接把落差最大的那個
+   * 比率指出來 —— 那就是所有公式一起偏低的同一個原因。
+   *
+   * 只陳述倍數關係，不說貴或便宜：計算值不必然是對的，市價也不必然是對的。
+   */
+  function outlierNote(s, all, results) {
+    if (!all.length) return "";
+    const lo = all[0], hi = all[all.length - 1];
+    const above = s.p > hi, below = s.p < lo;
+    if (!above && !below) return "";
+    let worst = null;
+    for (const m of METHODS) {
+      const r = results[m.id];
+      if (!r || r.na || !r.cur || !r.ref) continue;
+      const k = above ? r.cur / r.ref : r.ref / r.cur;
+      if (k > 1 && (!worst || k > worst.k)) {
+        worst = { k, cur: r.cur, ref: r.ref, name: M().ratioNames[r.ratio] };
+      }
+    }
+    return M().outlier(above, s.p, above ? hi : lo, all.length, worst);
+  }
+
   /* 計算值彙總
    *
    * 只做敘述統計：把各公式在你設定的參數下算出的數值蒐集起來，report
@@ -973,6 +1044,7 @@
     el.verdict.innerHTML =
       M().verdict(s.p, used.length, all.length, lo, hi, md, pctBelow,
                   vsMd >= 0 ? "+" : "−", Math.abs(vsMd)) +
+      outlierNote(s, all, results) +
       (used.length <= 2 ? M().verdictThin(used.length, psHint) : "");
   }
 

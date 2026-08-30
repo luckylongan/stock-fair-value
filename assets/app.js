@@ -197,6 +197,27 @@
         `<span class="verdict-thin">⚠︎ 目前只有 ${n} 種公式可計算（多數需要獲利為正），
          統計量等同單一模型的輸出，離散程度沒有參考意義。${psHint}</span>`,
       psHint: "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 依同業設定倍數後可勾選納入。",
+      ratioNames: { pe: "本益比", pb: "股價淨值比", ps: "股價營收比",
+                    ocf: "股價營業現金流比" },
+      outlier: (above, price, edge, n, w) => {
+        const dir = above ? "高於" : "低於";
+        const edgeName = above ? "最大" : "最小";
+        const head =
+          `<span class="verdict-thin">ⓘ 現價 <b>${fmt(price)}</b> ${dir}<b>全部 ${n} 個</b>計算值` +
+          `（${edgeName}值 <b>${fmt(edge)}</b>）。`;
+        const why = w
+          ? `落差主要來自<b>${w.name} ${fmt(w.cur)} 倍</b>，` +
+            (above ? `是參考倍數 ${fmt(w.ref)} 倍的 <b>${fmt(w.k, 1)} 倍</b>。`
+                   : `只有參考倍數 ${fmt(w.ref)} 倍的 <b>1/${fmt(w.k, 1)}</b>。`)
+          : "";
+        const tail =
+          `這十一種公式全部建立在<b>已實現的財務數字</b>上，市價若反映的是對未來的預期，` +
+          `公式看不到，落差就會全部顯示在這裡。<br>` +
+          `<b>這不代表資料有誤，也不代表哪一邊才是對的</b> —— ` +
+          `計算值取決於你設定的倍數，市價取決於市場願意付多少。` +
+          `想改用不同的基準，可到「計算參數」關掉同業／歷史區間，自行輸入倍數。</span>`;
+        return head + why + tail;
+      },
       loadFailTitle: "讀不到股價資料",
       loadFail: (m) =>
         `無法載入 <code>data/latest.json</code>（${m}）。<br>
@@ -437,6 +458,28 @@
          (most need positive earnings), so these statistics amount to the output of a single model and
          the spread means nothing. ${psHint}</span>`,
       psHint: "<b>Price / sales</b> is computable for this stock but excluded by default — set the multiples to the peer level, then tick it in.",
+      ratioNames: { pe: "P/E", pb: "P/B", ps: "P/S", ocf: "P/OCF" },
+      outlier: (above, price, edge, n, w) => {
+        const dir = above ? "above" : "below";
+        const edgeName = above ? "highest" : "lowest";
+        const head =
+          `<span class="verdict-thin">ⓘ The current price of <b>${fmt(price)}</b> is ${dir} ` +
+          `<b>all ${n}</b> computed values (${edgeName}: <b>${fmt(edge)}</b>). `;
+        const why = w
+          ? `The gap comes mainly from <b>${w.name} at ${fmt(w.cur)}x</b>, ` +
+            (above ? `which is <b>${fmt(w.k, 1)}×</b> the reference multiple of ${fmt(w.ref)}x. `
+                   : `which is <b>1/${fmt(w.k, 1)}</b> of the reference multiple of ${fmt(w.ref)}x. `)
+          : "";
+        const tail =
+          `All eleven formulas are built on <b>realised financial figures</b>. If the market price ` +
+          `reflects expectations about the future, the formulas cannot see that, and the whole ` +
+          `difference shows up here.<br>` +
+          `<b>This does not mean the data is wrong, nor that either side is right</b> — the computed ` +
+          `values depend on the multiples you set, and the market price depends on what buyers will ` +
+          `pay. To use a different basis, turn off the sector/historical range under "Assumptions" ` +
+          `and enter your own multiples.</span>`;
+        return head + why + tail;
+      },
       loadFailTitle: "Could not load price data",
       loadFail: (m) =>
         `Failed to fetch <code>data/latest.json</code> (${m}).<br>
@@ -679,6 +722,7 @@
       cheap: s.bvps * lo, fair: s.bvps * mid, rich: s.bvps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`),
+      cur: s.pb, ref: mid, ratio: "pb",
       formula: M().f.pbFormula(s.p, s.pb, s._rawBvps || s.bvps, dilutionNote(s), s.bvps, lo, mid, hi),
     };
   }
@@ -866,6 +910,7 @@
       cheap: sps * lo, fair: sps * mid, rich: sps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       tag: M().tagCurrent(cur),
+      cur, ref: mid, ratio: "ps",
       basis: `<span class="basis-tag">${M().tagFixed}</span>${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}` +
              `<span class="basis-src">${M().srcSps(sps)}</span>`,
       formula: M().f.psFormula(annualRev / 1e6, f.y, f.q, f.cum, f.ni / 1e6, sps, cur, lo, mid, hi),
@@ -930,6 +975,7 @@
       cheap: ps * lo, fair: ps * mid, rich: ps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       tag: M().tagCurrent(cur),
+      cur, ref: mid, ratio: "ocf",
       basis: `<span class="basis-tag">${M().tagFixed}</span>${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}` +
              `<span class="basis-src">${M().srcOcf(ps)}</span>`,
       formula: M().f.ocfFormula(c.y, c.q, c.ocf, annual, s.sh, ps, cur, lo, mid, hi),
@@ -976,6 +1022,7 @@
       cheap: s.eps * lo, fair: s.eps * mid, rich: s.eps * hi,
       labels: [M().labelMultiple(lo), M().labelMultiple(mid), M().labelMultiple(hi)],
       basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)}${X()}`),
+      cur: s.pe, ref: mid, ratio: "pe",
       formula: M().f.peFormula(s.p, s.pe, s._rawEps || s.eps, dilutionNote(s), s.eps, lo, mid, hi),
     };
   }
@@ -1171,7 +1218,7 @@
    *
    * 規則與門檻都直接顯示在畫面上，使用者可以自行改參數改變門檻。
    */
-  function renderSummaryPro(s, results, used) {
+  function renderSummaryPro(s, results, used) {   // eslint-disable-line no-unused-vars
     const cheap = median(used.map((r) => r.cheap));
     const fair = median(used.map((r) => r.fair));
     const rich = median(used.map((r) => r.rich));
@@ -1227,9 +1274,41 @@
     }
 
     el.verdict.className = "verdict " + cls;
+    // 專業版的三個價位是各欄中位數，落差說明拿全部計算值來看才有意義
+    const allPro = used.flatMap((r) => [r.cheap, r.fair, r.rich])
+                       .filter((v) => isFinite(v) && v > 0)
+                       .sort((a, b) => a - b);
     el.verdict.innerHTML =
-      `${head}${pick("。", ".")}<br>${action}` + M().proNote(used.length) +
+      `${head}${pick("。", ".")}<br>${action}` +
+      outlierNote(s, allPro, results) + M().proNote(used.length) +
       (used.length <= 2 ? M().proThin(used.length) : "");
+  }
+
+  /* 現價落在所有計算值之外時的說明
+   *
+   * 這種情況（例如獲利大幅衰退但股價還在高檔）畫面上會出現一整排遠低於現價
+   * 的數字，第一眼很像資料抓錯。與其讓使用者自己猜，直接把落差最大的那個
+   * 比率指出來 —— 那就是所有公式一起偏低的同一個原因。
+   *
+   * 只陳述倍數關係，不說貴或便宜：計算值不必然是對的，市價也不必然是對的。
+   */
+  function outlierNote(s, all, results) {
+    if (!all.length) return "";
+    const lo = all[0], hi = all[all.length - 1];
+    const above = s.p > hi, below = s.p < lo;
+    if (!above && !below) return "";
+
+    // 找出偏離參考倍數最多的比率，那是落差的來源
+    let worst = null;
+    for (const m of METHODS) {
+      const r = results[m.id];
+      if (!r || r.na || !r.cur || !r.ref) continue;
+      const k = above ? r.cur / r.ref : r.ref / r.cur;
+      if (k > 1 && (!worst || k > worst.k)) {
+        worst = { k, cur: r.cur, ref: r.ref, name: M().ratioNames[r.ratio] };
+      }
+    }
+    return M().outlier(above, s.p, above ? hi : lo, all.length, worst);
   }
 
   /* 計算值彙總
@@ -1283,6 +1362,7 @@
     el.verdict.innerHTML =
       M().verdict(s.p, used.length, all.length, lo, hi, md, pctBelow,
                   vsMd >= 0 ? "+" : "−", Math.abs(vsMd)) +
+      outlierNote(s, all, results) +
       (used.length <= 2 ? M().verdictThin(used.length, psHint) : "");
   }
 
