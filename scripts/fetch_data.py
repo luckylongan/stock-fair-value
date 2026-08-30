@@ -249,6 +249,21 @@ def fetch_shares():
             out[code] = (cap / par, cap)
             n += 1
     print("   上櫃 %d 檔（實收資本額 ÷ 面額）" % n)
+
+    # openapi.twse.com.tw 會擋 GitHub Actions 的雲端 IP（回傳非 JSON），
+    # 所以上市那半有可能整批抓不到。股數與資本額只在增資、減資、配股時才變動，
+    # 沿用上一次的值遠比留空好 —— 留空會讓市值整欄消失。
+    old = load_existing()
+    if old:
+        n = 0
+        for r in old.get("stocks", []):
+            code, sh, cap = r.get("c"), r.get("sh"), r.get("cap")
+            if code and sh and code not in out:
+                # 存檔時單位是百萬，這裡還原成股／元
+                out[code] = (sh * 1e6, cap * 1e6 if cap else None)
+                n += 1
+        if n:
+            print("   沿用上次的 %d 檔（本次來源沒回應）" % n)
     return out
 
 
