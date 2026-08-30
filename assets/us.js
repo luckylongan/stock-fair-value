@@ -1,0 +1,863 @@
+/* 幾塊你要買？ —— 美股財務計算工具箱
+ *
+ * 定位與台股版完全一致：對公開財務數字做機械式的乘除運算並顯示結果。
+ * 倍數、成長率、目標殖利率等假設一律由使用者設定，本站不替任何個股
+ * 設定「應該」的價位，也不對計算結果作評價或給買賣建議。
+ *
+ * 與台股版的三個結構性差異（不是實作偷懶，是兩地公開制度不同）：
+ *
+ *   1. 每股數字的方向相反。台灣的交易所直接公布本益比、股價淨值比與
+ *      殖利率，台股版是「由比率反推每股數字」；美國沒有這種官方統計，
+ *      這裡是「由 SEC 財報的每股數字算出比率」。
+ *   2. 沒有「該股近 5 年評價區間」，改用「同產業當前分布」。前者是
+ *      時間序列、後者是橫斷面，意義不同，卡片上必須標清楚。
+ *   3. 沒有月營收（美國不強制公布），那一格改放自由現金流。
+ *
+ * 資料：data/us.json、data/us_fin.json，由 scripts/fetch_us.py 每交易日更新。
+ */
+(() => {
+  "use strict";
+
+  // ── 狀態 ────────────────────────────────────────────────
+  let STOCKS = [];        // 全市場個股
+  let SECT = {};          // 產業 -> {pe:[P20,P50,P80], pb, ps, pfcf, y, n}
+  let FIN = {};           // 代號 -> {e:{年度/累計每股盈餘}, r:{營收}}
+  let INDEX = new Map();
+  let current = null;
+  let sugIdx = -1;
+  let TRADE_DATE = "";
+
+  const DEFAULTS = {
+    useBands: true,
+    peLo: 12, peMid: 20, peHi: 30,
+    pbLo: 1, pbMid: 2.5, pbHi: 5,
+    yHi: 4, yMid: 2.5, yLo: 1.5,
+    r: 8, g: 2.5, mos: 25,
+    psLo: 1, psMid: 2.5, psHi: 5,
+    fcfLo: 15, fcfMid: 25, fcfHi: 40,
+    pegLo: 0.75, pegMid: 1, pegHi: 1.5,
+    gCap: 40,
+    customEps: 0,
+    grahamG: 5, grahamSpan: 2,
+  };
+  const OFF_KEY = "us_off_methods_v1";
+  // 與台股版同理：股價營收比的合理倍數因產業而異極大，沒有通用預設值，
+  // 預設不納入彙總，讓使用者依同業調好參數後自行勾選。
+  const DEFAULT_OFF = ["ps"];
+  let params = { ...DEFAULTS };
+  let offMethods = new Set(DEFAULT_OFF);
+
+  const $ = (id) => document.getElementById(id);
+  const el = {};
+  ["q", "suggest", "clearBtn", "loading", "errorBox", "result", "empty", "methods",
+   "sName", "sCode", "sMarket", "sSector", "sDate", "sPrice", "sEps", "sBvps", "sRoe",
+   "sDps", "sPe", "sPb", "sPs", "sY", "sFq", "sFcfps", "sMc", "sSh",
+   "tCheap", "tFair", "tRich", "gaugeMark",
+   "gaugePrice", "gScaleL", "gScaleM", "gScaleR", "verdict", "dataDate", "dataCount",
+   "themeBtn", "resetParams"].forEach((k) => (el[k] = $(k)));
+
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const fmt = (v, d = 2) =>
+    (v === null || v === undefined || !isFinite(v)) ? "—"
+      : v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const median = (a) => {
+    const s = [...a].sort((x, y) => x - y), n = s.length;
+    if (!n) return null;
+    return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  };
+  /** 金額以百萬美元儲存，顯示時換成中文慣用的億／兆 */
+  const money = (m) => {
+    if (m === null || m === undefined || !isFinite(m)) return "—";
+    const a = Math.abs(m);
+    if (a >= 1e6) return fmt(m / 1e6, 2) + " 兆";      // 1 兆 = 100 萬個百萬
+    if (a >= 100) return fmt(m / 100, 1) + " 億";       // 1 億 = 100 個百萬
+    return fmt(m, 1) + " 百萬";
+  };
+  // 產業別取自那斯達克的分類，這裡只做顯示用的中譯
+  const SECTOR_ZH = {
+    "Technology": "科技", "Finance": "金融", "Health Care": "醫療保健",
+    "Consumer Discretionary": "非必需消費", "Consumer Staples": "必需消費",
+    "Industrials": "工業", "Real Estate": "不動產", "Energy": "能源",
+    "Basic Materials": "原物料", "Telecommunications": "電信",
+    "Utilities": "公用事業", "Miscellaneous": "其他",
+  };
+  const sectorZh = (k) => (k ? (SECTOR_ZH[k] ? SECTOR_ZH[k] + "（" + k + "）" : k) : "未分類");
+  const sectorShort = (k) => (k ? (SECTOR_ZH[k] || k) : "未分類");
+  /** "CY2026Q2" -> "2026Q2"；"CY2025" -> "2025 年度" */
+  const lbl = (p) => {
+    if (!p) return "—";
+    const m = /^CY(\d{4})(?:Q([1-4]))?$/.exec(p);
+    if (!m) return p;
+    return m[2] ? m[1] + "Q" + m[2] : m[1] + " 年度";
+  };
+
+  // ═══════════════════════════════════════════════════════
+  //  倍數基準
+  //
+  //  台股版優先採用「該股自己近 5 年的 P20 / P50 / P80」—— 那是這一檔
+  //  股票自己被市場交易出來的歷史紀錄。美股沒有等量的免費歷史資料
+  //  （要逐檔抓五年股價），所以改用另一種同樣客觀、但意義不同的統計：
+  //  **同產業所有個股「當前」的 P20 / P50 / P80**。
+  //
+  //  兩者的差別必須講清楚，不能混為一談：
+  //    近 5 年區間 = 這檔股票自己的歷史（跨時間）
+  //    同業分布   = 此刻整個產業的樣子（跨公司）
+  //  後者會跟著整個產業一起漲跌，產業整體在高檔時，中位數也在高檔。
+  // ═══════════════════════════════════════════════════════
+  function usable(s, key) {
+    if (!params.useBands) return null;
+    const b = SECT[s.sec];
+    return (b && b[key] && b[key].length === 3) ? b[key] : null;
+  }
+  function basisTag(band, txt, s, key) {
+    if (!band) return `<span class="basis-tag">固定倍數</span>${txt}`;
+    const n = (SECT[s.sec] || {})[key + "n"];
+    return `<span class="basis-tag">同業當前</span>${txt}` +
+           `<span class="basis-src">${sectorShort(s.sec)}${n ? " · " + n + " 檔" : ""}</span>`;
+  }
+
+  // 註冊地是那斯達克給的英文國名，這裡只翻常見的幾個，其餘照原文顯示
+  const COUNTRY_ZH = {
+    "Canada": "加拿大", "China": "中國", "Israel": "以色列", "Hong Kong": "香港",
+    "Singapore": "新加坡", "United Kingdom": "英國", "Cayman Islands": "開曼群島",
+    "Bermuda": "百慕達", "Greece": "希臘", "Switzerland": "瑞士",
+    "Netherlands": "荷蘭", "Taiwan": "台灣", "Ireland": "愛爾蘭",
+    "Australia": "澳洲", "Brazil": "巴西", "Japan": "日本", "Malaysia": "馬來西亞",
+    "Luxembourg": "盧森堡", "Mexico": "墨西哥", "Germany": "德國",
+    "Argentina": "阿根廷", "South Korea": "南韓", "France": "法國",
+    "India": "印度", "Chile": "智利", "Denmark": "丹麥", "Italy": "義大利",
+    "Sweden": "瑞典", "South Africa": "南非", "Spain": "西班牙",
+    "Belgium": "比利時", "Macau": "澳門", "Panama": "巴拿馬",
+    "United Arab Emirates": "阿聯", "Puerto Rico": "波多黎各",
+  };
+  const countryZh = (k) => COUNTRY_ZH[k] || k;
+
+  /** 沒有財報時的原因。卡片上要短（同一段話重複九次沒人會讀），
+   *  完整的說明放在個股卡的基準說明區，只講一次。 */
+  function noFin(s, full) {
+    if (s.co) {
+      return full
+        ? `${s.n} 是在${countryZh(s.co)}註冊的外國公司，以美國存託憑證（ADR）形式掛牌，` +
+          `依 20-F 用 <b>IFRS 及當地幣別</b>申報，不在 SEC 的 us-gaap 彙總表內。` +
+          `要換算成美元的每股數字，還需要匯率與 ADR 兌換比例（1 單位 ADR 不等於 1 股原股），` +
+          `這兩項沒有可靠的免費來源 —— 與其算出一個看起來合理卻是錯的數字，` +
+          `本站選擇不算。`
+        : `外國發行人（${countryZh(s.co)}），依 IFRS 及當地幣別申報，SEC 的 us-gaap 彙總表沒有它的財報數字。詳見上方個股卡。`;
+    }
+    return full
+      ? "SEC 的 us-gaap 彙總表沒有這家公司的財報。常見原因：剛上市還沒送出第一份年報、" +
+        "SPAC 或空殼公司、已下市清算，或公司重組後換了新的申報主體（舊主體的歷史財報" +
+        "不會自動接到新的統一編號上）。"
+      : "SEC 的 us-gaap 彙總表沒有這家公司的財報（新上市、SPAC，或公司重組換了申報主體）。詳見上方個股卡。";
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  計算公式
+  //  每個公式回傳 {cheap, fair, rich, labels, basis, formula} 或 {na: 原因}
+  //  cheap/fair/rich 只是「低／中／高參數」三組輸入對應的輸出，不含價值判斷。
+  // ═══════════════════════════════════════════════════════
+
+  /** 推估今年全年 EPS。
+   *  使用者若在參數區填了自訂 EPS，一律以它為準 —— 預估值是假設，
+   *  應該由使用者自己決定，網站算的只是預設起點。
+   */
+  function estimateAnnualEps(s) {
+    if (params.customEps > 0) {
+      return { eps: params.customEps, src: "自訂", custom: true };
+    }
+    const f = (FIN[s.c] || {}).e;
+    if (f && f.n > 0 && f.ytd > 0) {
+      return { eps: (f.ytd / f.n) * 4, src: "季報年化", f };
+    }
+    if (s.eps > 0) return { eps: s.eps, src: "近四季", f };
+    return null;
+  }
+
+  /* 1. 本益比法（年化 EPS）—— 用本會計年度已公布的季報推估全年
+   *
+   *    SEC 的近四季 EPS 反映過去一整年；獲利正在成長或衰退的公司，
+   *    近四季會落後現況。這裡改用會計年度至今的累計數年化：
+   *
+   *      年化 EPS = 本年度累計 EPS ÷ 已公布季數 × 4
+   */
+  function methodPeFwd(s) {
+    const b0 = usable(s, "pe");
+    const [l0, m0, h0] = b0 || [params.peLo, params.peMid, params.peHi];
+    if (params.customEps > 0) {
+      const e0 = params.customEps;
+      return {
+        cheap: e0 * l0, fair: e0 * m0, rich: e0 * h0,
+        labels: [`${fmt(l0)} 倍`, `${fmt(m0)} 倍`, `${fmt(h0)} 倍`],
+        tag: "你輸入的 EPS",
+        basis: basisTag(b0, `${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍`, s, "pe"),
+        formula: `對應價 ＝ 你輸入的 EPS ${fmt(e0)} × ${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍` +
+                 `<br><span class="formula-warn">※ 目前使用自訂 EPS，清空參數區的欄位即可改回依季報計算</span>`,
+      };
+    }
+    const f = (FIN[s.c] || {}).e;
+    if (!f) return { na: noFin(s) };
+    if (!f.n) {
+      return { na: `最近一個完整會計年度（${lbl(f.fyl)}，截至 ${f.fye}）結束後，` +
+                   "SEC 還沒有更新的季報可以年化。這時「近四季」用的就是同一份年報，" +
+                   "兩種算法會得到相同的數字，所以這裡不重複列出。" };
+    }
+    if (!(f.ytd > 0)) {
+      return { na: `本會計年度累計每股盈餘為 ${fmt(f.ytd)} 美元（截至 ${lbl(f.l)}），` +
+                   "虧損無法年化，此法不適用。" };
+    }
+    const eps = (f.ytd / f.n) * 4;
+    const mult = { 1: 4, 2: 2, 3: "4/3", 4: 1 }[f.n] || 4;
+    const risk = {
+      1: "只用一季實績推全年，外推成分最重，淡旺季或一次性損益會被放大四倍",
+      2: "以半年實績推全年，淡旺季影響仍需留意",
+      3: "已有前三季實績，外推誤差較小",
+      4: "已是全年實績，沒有外推",
+    }[f.n] || "外推成分重";
+    return {
+      cheap: eps * l0, fair: eps * m0, rich: eps * h0,
+      labels: [`${fmt(l0)} 倍`, `${fmt(m0)} 倍`, `${fmt(h0)} 倍`],
+      tag: `年化 · ${lbl(f.l)}`,
+      basis: basisTag(b0, `${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍`, s, "pe") +
+             `<span class="basis-src">依 ${f.n} 季累計</span>`,
+      formula:
+        `年化 EPS ＝ 本年度累計 ${fmt(f.ytd)} ÷ ${f.n} 季 × 4 ＝ ${fmt(eps)} 美元<br>` +
+        `對應價 ＝ ${fmt(eps)} × ${fmt(l0)} / ${fmt(m0)} / ${fmt(h0)} 倍` +
+        `<br><span class="formula-warn">※ 以 ${f.n} 季實績外推全年（×${mult}）：${risk}</span>`,
+    };
+  }
+
+  /* 2. 本益比法（近四季 EPS）
+   *
+   *    近四季不是把四個日曆季相加 —— XBRL 有個結構性缺口：公司的會計年度
+   *    第四季通常不會單獨標記，年報只揭露全年。所以後端改用會計年度重建：
+   *      近四季 = 最近完整會計年度 + 該年度結束後的累計 − 去年同期累計
+   */
+  function methodPe(s) {
+    if (!s.eps) return { na: (FIN[s.c] || {}).e ? "缺少近四季每股盈餘。" : noFin(s) };
+    if (s.eps <= 0) {
+      return { na: `近四季每股盈餘為 ${fmt(s.eps)} 美元（虧損），本益比法不適用。` };
+    }
+    const b = usable(s, "pe");
+    const [lo, mid, hi] = b || [params.peLo, params.peMid, params.peHi];
+    const f = (FIN[s.c] || {}).e;
+    return {
+      cheap: s.eps * lo, fair: s.eps * mid, rich: s.eps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`, s, "pe"),
+      formula:
+        (f && f.n
+          ? `近四季 EPS ＝ ${lbl(f.fyl)} 全年 ${fmt(f.fy)} ＋ 本年度累計 ${fmt(f.ytd)} ` +
+            `− 去年同期 ＝ ${fmt(s.eps)} 美元`
+          : `近四季 EPS ＝ ${lbl((f || {}).fyl)}全年 ＝ ${fmt(s.eps)} 美元`) +
+        (s.epsalt
+          ? `<br><span class="formula-adj">↳ 本檔申報的每股盈餘與市值反推的股數對不起來` +
+            `（多見於雙重股權），改用 淨利 ÷ 股數 計算</span>` : "") +
+        `<br>對應價 ＝ ${fmt(s.eps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`,
+    };
+  }
+
+  /* 3. 本益成長比（PEG）—— 讓估值跟著成長性走
+   *      對應價 = 預估 EPS × 成長率(%) × 你設定的目標 PEG
+   */
+  function methodPeg(s) {
+    const f = (FIN[s.c] || {}).e;
+    if (!f) return { na: noFin(s) };
+    const est = estimateAnnualEps(s);
+    if (!est) return { na: "缺少可用的每股盈餘（公司虧損），無法推估成長率。" };
+    if (f.pfy === undefined || f.pfy === null) {
+      return { na: `缺少 ${lbl(f.fyl)} 之前一個會計年度的每股盈餘，無法計算成長率。` };
+    }
+    if (f.pfy <= 0) {
+      return { na: `前一個會計年度為虧損（每股 ${fmt(f.pfy)} 美元），` +
+                   "由虧轉盈的成長率沒有意義，此法不適用。" };
+    }
+    const gRaw = (est.eps / f.pfy - 1) * 100;
+    if (gRaw <= 0) {
+      return { na: `預估 EPS ${fmt(est.eps)} 美元低於前一年度 ${fmt(f.pfy)} 美元` +
+                   `（衰退 ${fmt(Math.abs(gRaw), 1)}%），PEG 不適用於獲利衰退的公司。` };
+    }
+    const g = Math.min(gRaw, params.gCap);
+    const capped = gRaw > params.gCap;
+    return {
+      cheap: est.eps * g * params.pegLo,
+      fair: est.eps * g * params.pegMid,
+      rich: est.eps * g * params.pegHi,
+      labels: [`PEG ${fmt(params.pegLo, 2)}`, `PEG ${fmt(params.pegMid, 2)}`, `PEG ${fmt(params.pegHi, 2)}`],
+      tag: `成長 ${fmt(g, 0)}%`,
+      basis: `<span class="basis-tag">你的參數</span>目標 PEG ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
+             `<span class="basis-src">對比前一會計年度</span>`,
+      formula:
+        `成長率 ＝ 預估 ${fmt(est.eps)}（${est.src}） ÷ 前一年度 ${fmt(f.pfy)} − 1 ＝ ${fmt(gRaw, 1)}%` +
+        (capped ? `<br><span class="formula-adj">↳ 超過上限，以 ${fmt(params.gCap, 0)}% 計算</span>` : "") +
+        `<br>對應本益比 ＝ 成長率 ${fmt(g, 1)} × 目標 PEG<br>` +
+        `對應價 ＝ ${fmt(est.eps)} × ${fmt(g, 1)} × ${fmt(params.pegLo, 2)} / ${fmt(params.pegMid, 2)} / ${fmt(params.pegHi, 2)}` +
+        `<br><span class="formula-warn">※ 以單一年度成長率外推，景氣循環股容易在高峰期被高估</span>`,
+    };
+  }
+
+  /* 4. 自由現金流法（P/FCF）
+   *
+   *    台股版這一格是「月營收動能法」—— 台灣規定每月 10 日前公布上月營收，
+   *    比季報快約 35 天，所以它是最即時的基本面資料。美國沒有月營收制度，
+   *    硬做出一個「季營收動能」，推導後會和上面的年化 EPS 完全相同
+   *    （分子分母的季數會消掉），等於同一個數字算兩次。
+   *
+   *    所以這一格改放美股拿得到、而且其他八種公式都看不到的東西：
+   *
+   *      自由現金流 = 營業活動現金流 − 資本支出
+   *      對應價     = 每股自由現金流 × 你設定的 P/FCF 倍數
+   *
+   *    盈餘含折舊攤銷與各種應計項目，現金流則是真的收到的錢。
+   */
+  function methodFcf(s) {
+    if (!s.fcfps) {
+      if (!FIN[s.c]) return { na: noFin(s) };
+      if (s.fcf !== undefined && s.fcf <= 0) {
+        return { na: `${lbl(s.fcfl)}自由現金流為 ${money(s.fcf)}美元（為負），` +
+                     "代表營業現金流不足以支應資本支出，此法不適用。" };
+      }
+      return { na: "缺少營業活動現金流或資本支出（金融業的現金流量表結構不同，" +
+                   "多數銀行、保險公司沒有可比的資本支出科目）。" };
+    }
+    const b = usable(s, "pfcf");
+    const [lo, mid, hi] = b || [params.fcfLo, params.fcfMid, params.fcfHi];
+    return {
+      cheap: s.fcfps * lo, fair: s.fcfps * mid, rich: s.fcfps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
+      tag: `${lbl(s.fcfl)}`,
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`, s, "pfcf") +
+             `<span class="basis-src">每股自由現金流 ${fmt(s.fcfps)} 美元</span>`,
+      formula:
+        `自由現金流 ＝ 營業活動現金流 − 資本支出 ＝ ${money(s.fcf)}美元（${lbl(s.fcfl)}）<br>` +
+        `每股自由現金流 ＝ ${money(s.fcf)} ÷ ${money(s.sh)}股 ＝ ${fmt(s.fcfps)} 美元　` +
+        `目前 P/FCF ${fmt(s.pfcf)} 倍<br>` +
+        `對應價 ＝ ${fmt(s.fcfps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `<br><span class="formula-warn">※ 現金流量表在美國是以年初至今累計申報，` +
+        `半年與九個月的累計值不在 SEC 的期間彙總表內，因此近四季無法穩定重建 ——` +
+        `這裡取的是<b>${lbl(s.fcfl)}一整年</b>的數字，比其他公式舊。` +
+        `大幅擴廠或處分資產的年度會失真。</span>`,
+    };
+  }
+
+  /* 5. 葛拉漢公式（Benjamin Graham, 1962）　V = EPS × (8.5 + 2g) */
+  function methodGraham(s) {
+    const est = estimateAnnualEps(s);
+    const eps = est ? est.eps : s.eps;
+    if (!eps || eps <= 0) {
+      return { na: FIN[s.c] ? "缺少可用的每股盈餘（公司虧損），或你尚未在參數區輸入自訂 EPS。"
+                            : noFin(s) };
+    }
+    const g = params.grahamG, span = params.grahamSpan;
+    const gs = [g - span, g, g + span];
+    // (8.5 + 2g) 在 g < −4.25 時會變成負數，夾住避免出現負價格
+    const mult = gs.map((x) => Math.max(8.5 + 2 * x, 0.5));
+    return {
+      cheap: eps * mult[0], fair: eps * mult[1], rich: eps * mult[2],
+      labels: gs.map((x) => `g ${fmt(x, 1)}%`),
+      tag: `g ${fmt(g, 1)}%`,
+      basis: `<span class="basis-tag">你的參數</span>成長率 g ${fmt(g, 1)}%（±${fmt(span, 1)}%）` +
+             `<span class="basis-src">EPS ${fmt(eps)} 美元 · ${est ? est.src : "近四季"}</span>`,
+      formula:
+        `葛拉漢公式　V ＝ EPS × (8.5 + 2g)<br>` +
+        `代入 g ＝ ${fmt(gs[0], 1)} / ${fmt(g, 1)} / ${fmt(gs[2], 1)}%　→　` +
+        `倍數 ${fmt(mult[0])} / ${fmt(mult[1])} / ${fmt(mult[2])}<br>` +
+        `V ＝ ${fmt(eps)} × 各倍數` +
+        `<br><span class="formula-warn">※ 8.5 為葛拉漢 1962 年提出的零成長基準本益比，` +
+        `成長率 g 完全由你設定；此式未考慮利率環境，原著另有以 AAA 公司債` +
+        `殖利率調整的版本</span>`,
+    };
+  }
+
+  /* 6. ROE 法 —— 由高登成長模型推導出對應的股價淨值比
+   *      P/B = (ROE − g) / (r − g)，再乘上每股淨值。
+   */
+  function methodRoe(s) {
+    if (!s.bvps) return { na: s.eq ? "股東權益為負，無法計算每股淨值。" : noFin(s) };
+    if (!s.roe) return { na: "缺少 ROE（需要近四季淨利與股東權益同時存在）。" };
+    const r = params.r / 100, g = params.g / 100, roe = s.roe / 100;
+    if (g >= r) return { na: "永續成長率 g 必須小於要求報酬率 r，模型無解，請調整參數。" };
+    if (roe <= g) {
+      return { na: `ROE ${fmt(s.roe)}% 未高於永續成長率 g ${fmt(params.g, 1)}%，` +
+                   "模型會得出負值或極低估值，不適用。" };
+    }
+    const pbFair = (roe - g) / (r - g);
+    const fair = s.bvps * pbFair, m = params.mos / 100;
+    return {
+      cheap: fair * (1 - m), fair, rich: fair * (1 + m),
+      labels: [`P/B ${fmt(pbFair * (1 - m))} 倍`, `P/B ${fmt(pbFair)} 倍`, `P/B ${fmt(pbFair * (1 + m))} 倍`],
+      basis: `<span class="basis-tag">你的參數</span>r ${fmt(params.r, 1)}%　g ${fmt(params.g, 1)}%　安全邊際 ${fmt(params.mos, 0)}%`,
+      formula:
+        `ROE ＝ 近四季淨利 ${money(s.ni)} ÷ 股東權益 ${money(s.eq)} ＝ ${fmt(s.roe)}%<br>` +
+        `模型 P/B ＝ (ROE ${fmt(s.roe)}% − g ${fmt(params.g, 1)}%) ÷ (r ${fmt(params.r, 1)}% − g ${fmt(params.g, 1)}%) ＝ ${fmt(pbFair)} 倍<br>` +
+        `對應價 ＝ 每股淨值 ${fmt(s.bvps)} × ${fmt(pbFair)} ＝ ${fmt(fair)} 美元<br>` +
+        `上下限 ＝ 對應價 × (1 ∓ 安全邊際 ${fmt(params.mos, 0)}%)` +
+        `<br><span class="formula-warn">※ 美股大量實施庫藏股，買回的股份會直接沖減股東權益，` +
+        `長期買回的公司淨值偏低、ROE 因而偏高（極端者股東權益為負），這個模型會給出很高的倍數</span>`,
+    };
+  }
+
+  /* 7. 股價淨值比法 —— 每股淨值 × 你選定的 P/B 倍數 */
+  function methodPb(s) {
+    if (!s.bvps) {
+      return { na: s.eq !== undefined
+        ? `股東權益為 ${money(s.eq)}美元（為負，多因長期實施庫藏股），無法計算每股淨值。`
+        : noFin(s) };
+    }
+    const b = usable(s, "pb");
+    const [lo, mid, hi] = b || [params.pbLo, params.pbMid, params.pbHi];
+    return {
+      cheap: s.bvps * lo, fair: s.bvps * mid, rich: s.bvps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`, s, "pb"),
+      formula:
+        `每股淨值 ＝ 股東權益 ${money(s.eq)} ÷ ${money(s.sh)}股 ＝ ${fmt(s.bvps)} 美元<br>` +
+        `對應價 ＝ ${fmt(s.bvps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `<br><span class="formula-warn">※ 帳面淨值不含自行發展的品牌、專利與軟體，` +
+        `輕資產公司的 P/B 天生就高；美股的庫藏股也會壓低淨值</span>`,
+    };
+  }
+
+  /* 8. 股價營收比（P/S）—— 營收恆為正，虧損公司也算得出來 */
+  function methodPs(s) {
+    if (!s.sps) return { na: FIN[s.c] ? "缺少近四季營收（金融業多無可比的營收科目）。" : noFin(s) };
+    const b = usable(s, "ps");
+    const [lo, mid, hi] = b || [params.psLo, params.psMid, params.psHi];
+    return {
+      cheap: s.sps * lo, fair: s.sps * mid, rich: s.sps * hi,
+      labels: [`${fmt(lo)} 倍`, `${fmt(mid)} 倍`, `${fmt(hi)} 倍`],
+      tag: `目前 ${fmt(s.ps)} 倍`,
+      basis: basisTag(b, `${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍`, s, "ps") +
+             `<span class="basis-src">每股營收 ${fmt(s.sps)} 美元</span>`,
+      formula:
+        `每股營收 ＝ 近四季營收 ${money(s.rev)} ÷ ${money(s.sh)}股 ＝ ${fmt(s.sps)} 美元<br>` +
+        `對應價 ＝ ${fmt(s.sps)} × ${fmt(lo)} / ${fmt(mid)} / ${fmt(hi)} 倍` +
+        `<br><span class="formula-warn">※ 合理倍數因產業而異極大（軟體常在 5~10 倍以上、` +
+        `通路與零售低於 1 倍）。因為沒有一組通用預設值，本法<b>預設不納入彙總</b> ——` +
+        `請先確認同業水準再勾選納入。它完全不看獲利能力，營收高但長年虧損的公司會被高估。</span>`,
+    };
+  }
+
+  /* 9. 股利法 —— 每股現金股利 ÷ 你設定的目標殖利率
+   *    殖利率與股價成反比，故最高的殖利率對應最低的價格。 */
+  function methodDiv(s) {
+    if (!s.d) {
+      return { na: FIN[s.c]
+        ? "SEC 財報中查無近四季普通股現金股利。美國不少大型成長股完全不配息，" +
+          "改以庫藏股回饋股東，股利法對這類公司不適用。"
+        : noFin(s) };
+    }
+    const b = usable(s, "y");
+    // 歷史／同業區間為 [P20, P50, P80]；殖利率與價格成反比，取用時左右對調
+    const yCheap = b ? b[2] : params.yHi;
+    const yFair = b ? b[1] : params.yMid;
+    const yRich = b ? b[0] : params.yLo;
+    return {
+      cheap: s.d / (yCheap / 100), fair: s.d / (yFair / 100), rich: s.d / (yRich / 100),
+      labels: [`殖利率 ${fmt(yCheap)}%`, `殖利率 ${fmt(yFair)}%`, `殖利率 ${fmt(yRich)}%`],
+      basis: basisTag(b, `殖利率 ${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%`, s, "y"),
+      formula:
+        `每股現金股利 ＝ ${fmt(s.d)} 美元（近四季申報）　目前殖利率 ${fmt(s.y)}%<br>` +
+        `對應價 ＝ ${fmt(s.d)} ÷ ${fmt(yCheap)}% / ${fmt(yFair)}% / ${fmt(yRich)}%<br>` +
+        `（殖利率與價格成反比，殖利率越高對應的價格越低）` +
+        `<br><span class="formula-warn">※ 美股多按季配息，這裡是 SEC 財報中申報的金額，` +
+        `不含特別股利與資本公積返還的差異；美國對外國投資人的股利預扣稅為 30%，` +
+        `實收金額低於帳面殖利率</span>`,
+    };
+  }
+
+  // 依估價基礎分組：本益比家族 → 現金流 → 淨值類 → 營收類 → 股利類
+  const METHODS = [
+    { id: "pefwd", name: "本益比法", tag: "年化 EPS", en: "Forward P/E", fn: methodPeFwd },
+    { id: "pe", name: "本益比法", tag: "近四季", en: "Trailing P/E", fn: methodPe },
+    { id: "peg", name: "本益成長比", en: "PEG Ratio", fn: methodPeg },
+    { id: "fcf", name: "自由現金流法", en: "Price / Free Cash Flow", fn: methodFcf },
+    { id: "graham", name: "葛拉漢公式", en: "Graham Formula", fn: methodGraham },
+    { id: "roe", name: "ROE 法", en: "Return on Equity", fn: methodRoe },
+    { id: "pb", name: "股價淨值比法", en: "P/B Ratio", fn: methodPb },
+    { id: "ps", name: "股價營收比", en: "P/S Ratio", fn: methodPs },
+    { id: "div", name: "股利法", en: "Dividend", fn: methodDiv },
+  ];
+
+  // ═══════════════════════════════════════════════════════
+  //  渲染
+  // ═══════════════════════════════════════════════════════
+  function render() {
+    if (!current) return;
+    const s = current;
+
+    el.sName.textContent = s.n;
+    el.sCode.textContent = s.c;
+    el.sMarket.textContent = s.m;
+    el.sSector.textContent = sectorZh(s.sec);
+    el.sSector.hidden = !s.sec;
+    el.sDate.textContent = "收盤 " + (TRADE_DATE || "—");
+    el.sPrice.textContent = fmt(s.p);
+    el.sEps.textContent = s.eps ? fmt(s.eps) : "—";
+    el.sBvps.textContent = s.bvps ? fmt(s.bvps) : "—";
+    el.sRoe.textContent = s.roe ? fmt(s.roe) + " %" : "—";
+    el.sDps.textContent = s.d ? fmt(s.d) : "—";
+    el.sPe.textContent = s.pe ? fmt(s.pe) + " 倍" : "—";
+    el.sPb.textContent = s.pb ? fmt(s.pb) + " 倍" : "—";
+    el.sPs.textContent = s.ps ? fmt(s.ps) + " 倍" : "—";
+    el.sY.textContent = s.y ? fmt(s.y) + " %" : "—";
+    el.sFcfps.textContent = s.fcfps ? fmt(s.fcfps) : "—";
+    el.sMc.textContent = s.mc ? money(s.mc) : "—";
+    el.sSh.textContent = s.sh ? money(s.sh) + "股" : "—";
+    el.sFq.textContent = lbl(s.fq);
+    renderBasisNote(s);
+
+    const results = {};
+    el.methods.innerHTML = "";
+    METHODS.forEach((m) => {
+      const res = m.fn(s);
+      results[m.id] = res;
+      const on = !offMethods.has(m.id);
+      const card = document.createElement("div");
+      card.className = "method" + (res.na ? " na" : (on ? "" : " off"));
+      card.innerHTML = `
+        <div class="method-head">
+          ${res.na ? "" :
+            `<input type="checkbox" class="method-toggle" data-m="${m.id}" ${on ? "checked" : ""}
+                    aria-label="是否納入計算值彙總">`}
+          <h3>${m.name}${(res.tag || m.tag) ? `<span class="m-tag">${res.tag || m.tag}</span>` : ""}<span class="m-en">${m.en}</span></h3>
+        </div>
+        ${res.na
+          ? `<p class="method-basis">—</p><p class="method-na">⚠︎ ${res.na}</p>`
+          : `<p class="method-basis">${res.basis}</p>
+             <div class="method-prices">
+               <div class="mp lo"><span>${(res.labels || ["低", "中", "高"])[0]}</span><strong>${fmt(res.cheap)}</strong></div>
+               <div class="mp mid"><span>${(res.labels || ["低", "中", "高"])[1]}</span><strong>${fmt(res.fair)}</strong></div>
+               <div class="mp hi"><span>${(res.labels || ["低", "中", "高"])[2]}</span><strong>${fmt(res.rich)}</strong></div>
+             </div>
+             <p class="method-formula">${res.formula}</p>`}
+      `;
+      el.methods.appendChild(card);
+    });
+
+    el.methods.querySelectorAll(".method-toggle").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        cb.checked ? offMethods.delete(cb.dataset.m) : offMethods.add(cb.dataset.m);
+        localStorage.setItem(OFF_KEY, JSON.stringify([...offMethods]));
+        render();
+      });
+    });
+
+    renderSummary(s, results);
+  }
+
+  /** 個股卡上的資料基準說明：近四季是怎麼拼出來的，或為什麼沒有財報 */
+  function renderBasisNote(s) {
+    const box = $("basisNote");
+    if (!box) return;
+    const f = (FIN[s.c] || {}).e;
+    if (!f) {
+      box.innerHTML = `<span class="dn-ico">ⓘ</span><div>${noFin(s, true)}
+        本頁只顯示查得到的部分（收盤價、市值、產業別），九種公式全部標示不適用。
+        ${s.co === "Taiwan" ? `<br><br>這檔的原股在台股掛牌，可以到<a href="index.html">計算版</a>直接用台股的資料查。` : ""}
+        </div>`;
+      box.hidden = false;
+      return;
+    }
+    const parts = [];
+    if (f.n) {
+      parts.push(
+        `<b>近四季（TTM）是重建出來的。</b>XBRL 有個結構性缺口：公司的會計年度
+         <b>第四季通常不會單獨標記</b>，年報只揭露全年數字，直接把四個日曆季相加
+         大部分公司會少一季。所以本站改用會計年度重建 ——
+         <b>${lbl(f.fyl)}全年 ${fmt(f.fy)}</b>（截至 ${f.fye}）
+         ＋ <b>該年度結束後 ${f.n} 季累計 ${fmt(f.ytd)}</b>（至 ${lbl(f.l)}）
+         − 去年同期 ＝ 近四季 <b>${fmt(s.eps)}</b> 美元。`);
+    } else {
+      parts.push(
+        `本檔最近一個完整會計年度是 <b>${lbl(f.fyl)}</b>（截至 ${f.fye}），
+         之後尚無更新的季報，因此「近四季」用的就是這份年報的全年數字
+         <b>${fmt(f.fy)}</b> 美元，年化法不另外列出。`);
+    }
+    if (!f.x) {
+      parts.push(
+        `<b>去年同期的季別資料不齊，無法完成扣減</b>，近四季暫以
+         ${lbl(f.fyl)}全年數字代替，會落後於最新一季的實績。`);
+    }
+    if (s.epsalt) {
+      parts.push(
+        `本檔申報的每股盈餘與「市值 ÷ 股價」反推的股數對不起來（雙重股權的公司
+         常只申報其中一個股別），因此 EPS 改用 <b>近四季淨利 ÷ 股數</b> 計算。`);
+    }
+    box.innerHTML = `<span class="dn-ico">⚖︎</span><div>${parts.join("<br><br>")}</div>`;
+    box.hidden = false;
+  }
+
+  /* 計算值彙總
+   *
+   * 只做敘述統計：把各公式在你設定的參數下算出的數值蒐集起來，report
+   * 最小值、中位數、最大值，以及現價落在這些數值中的相對位置。
+   * 不對任何一個數值賦予「便宜／合理／昂貴」之類的評價 —— 倍數與假設
+   * 是你自己選的，結論也應該由你自己下。
+   */
+  function renderSummary(s, results) {
+    const used = METHODS.filter((m) => !results[m.id].na && !offMethods.has(m.id))
+                        .map((m) => results[m.id]);
+    const all = used.flatMap((r) => [r.cheap, r.fair, r.rich])
+                    .filter((v) => isFinite(v) && v > 0)
+                    .sort((a, b) => a - b);
+
+    const lo = all.length ? all[0] : null;
+    const hi = all.length ? all[all.length - 1] : null;
+    const md = median(all);
+
+    el.tCheap.textContent = fmt(lo);
+    el.tFair.textContent = fmt(md);
+    el.tRich.textContent = fmt(hi);
+    el.gScaleL.innerHTML = "<i>最小</i> <b>" + fmt(lo) + "</b>";
+    el.gScaleM.innerHTML = "<i>中位數</i> <b>" + fmt(md) + "</b>";
+    el.gScaleR.innerHTML = "<i>最大</i> <b>" + fmt(hi) + "</b>";
+    el.gaugePrice.textContent = fmt(s.p);
+
+    if (!all.length || !(lo < hi)) {
+      el.gaugeMark.style.left = "50%";
+      el.verdict.className = "verdict";
+      el.verdict.textContent = used.length
+        ? "目前納入的公式只產生單一數值，無法做分佈統計，請直接看下方各公式的計算結果。"
+        : (FIN[s.c] ? "目前沒有任何公式可計算（多數公式需要獲利或股利為正），或所有公式都被取消勾選。"
+                    : "本檔沒有 SEC 財報資料，九種公式都無法計算，說明見上方。");
+      return;
+    }
+
+    const pos = clamp(((s.p - lo) / (hi - lo)) * 100, 2, 98);
+    el.gaugeMark.style.left = pos.toFixed(1) + "%";
+
+    const below = all.filter((v) => v < s.p).length;
+    const pctBelow = (below / all.length) * 100;
+    const vsMd = (s.p / md - 1) * 100;
+
+    el.verdict.className = "verdict";
+    el.verdict.innerHTML =
+      `現價 <b>${fmt(s.p)}</b> 美元。目前納入 <b>${used.length}</b> 種公式、
+       共 <b>${all.length}</b> 個計算值，範圍 <b>${fmt(lo)}</b> ～ <b>${fmt(hi)}</b> 美元，
+       中位數 <b>${fmt(md)}</b> 美元。<br>
+       現價高於其中 <b>${fmt(pctBelow, 0)}%</b> 的計算值，
+       與中位數相差 <b>${vsMd >= 0 ? "+" : "−"}${fmt(Math.abs(vsMd), 1)}%</b>。
+       <span class="verdict-note">以上為敘述統計，計算值取決於你在「計算參數」中設定的倍數與假設，
+       本站不對這些數值作任何評價，也不構成買賣建議。</span>` +
+      (used.length <= 2
+        ? `<span class="verdict-thin">⚠︎ 目前只有 ${used.length} 種公式可計算，
+           統計量等同單一模型的輸出，離散程度沒有參考意義。
+           ${results.ps && !results.ps.na && offMethods.has("ps")
+              ? "本檔的<b>股價營收比</b>算得出來但預設未納入 —— 確認同業倍數後可勾選納入。"
+              : ""}</span>`
+        : "");
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  搜尋
+  // ═══════════════════════════════════════════════════════
+  function search(kw) {
+    const raw = kw.trim();
+    let out = rawSearch(raw);
+    // 選定後搜尋框留著「AAPL Apple Inc.」，接著打字會變成搜不到的字串，
+    // 這時改用其中任一段重新尋找，讓輸入不會卡住。
+    if (!out.length && /\s/.test(raw)) {
+      for (const part of raw.split(/\s+/)) {
+        out = rawSearch(part);
+        if (out.length) break;
+      }
+    }
+    return out;
+  }
+
+  function rawSearch(kw) {
+    kw = kw.trim().toLowerCase();
+    if (!kw) return [];
+    const starts = [], contains = [];
+    for (const s of STOCKS) {
+      const code = s.c.toLowerCase(), name = s.n.toLowerCase();
+      if (code === kw) return [s, ...STOCKS.filter((x) => x !== s &&
+             (x.c.toLowerCase().startsWith(kw) || x.n.toLowerCase().includes(kw))).slice(0, 11)];
+      if (code.startsWith(kw) || name.startsWith(kw)) starts.push(s);
+      else if (name.includes(kw)) contains.push(s);
+      if (starts.length > 30) break;
+    }
+    // 同樣是開頭吻合時，市值大的排前面 —— 美股代號重疊多，這樣比較好找
+    starts.sort((a, b) => (b.mc || 0) - (a.mc || 0));
+    return [...starts, ...contains].slice(0, 12);
+  }
+
+  function showSuggest(list, kw) {
+    sugIdx = -1;
+    if (!list.length) {
+      const q = (kw || "").trim();
+      if (!q) { el.suggest.hidden = true; return; }
+      el.suggest.innerHTML =
+        `<li class="no-hit">找不到「${q}」——請輸入美股代號或公司名稱（英文）</li>`;
+      el.suggest.hidden = false;
+      return;
+    }
+    el.suggest.innerHTML = list.map((s) => `
+      <li data-code="${s.c}">
+        <span class="s-code">${s.c}</span>
+        <span class="s-name">${s.n}</span>
+        <span class="s-meta">${s.m}　${fmt(s.p)}</span>
+      </li>`).join("");
+    el.suggest.hidden = false;
+    el.suggest.querySelectorAll("li[data-code]").forEach((li) =>
+      li.addEventListener("mousedown", (e) => { e.preventDefault(); select(li.dataset.code); }));
+  }
+
+  function select(code) {
+    const s = INDEX.get(code);
+    if (!s) return;
+    current = s;
+    el.q.value = `${s.c} ${s.n}`;
+    el.suggest.hidden = true;
+    el.clearBtn.hidden = false;
+    el.empty.hidden = true;
+    el.result.hidden = false;
+    history.replaceState(null, "", "#" + code);
+    render();
+    if (window.scrollY > 220) el.result.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  資料載入
+  // ═══════════════════════════════════════════════════════
+  async function boot() {
+    try {
+      const [us, fin] = await Promise.all([
+        fetch("data/us.json?t=" + Date.now()).then((r) => {
+          if (!r.ok) throw new Error("us.json " + r.status);
+          return r.json();
+        }),
+        fetch("data/us_fin.json?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
+                                                 .catch(() => null),
+      ]);
+      STOCKS = us.stocks;
+      INDEX = new Map(STOCKS.map((s) => [s.c, s]));
+      SECT = us.sectors || {};
+      if (fin && fin.fin) FIN = fin.fin;
+      TRADE_DATE = us.trade_date || "";
+      el.dataDate.textContent = TRADE_DATE ? "資料日 " + TRADE_DATE : "資料日 —";
+      el.dataCount.textContent = `${us.count || STOCKS.length} 檔美股`;
+      el.loading.hidden = true;
+
+      const hash = decodeURIComponent(location.hash.replace("#", "")).trim().toUpperCase();
+      if (hash && INDEX.has(hash)) select(hash);
+    } catch (err) {
+      el.loading.hidden = true;
+      el.errorBox.hidden = false;
+      el.errorBox.innerHTML =
+        `<b>讀不到美股資料</b>無法載入 <code>data/us.json</code>（${err.message}）。<br>
+         若是在本機直接以檔案開啟網頁，瀏覽器會擋下讀取，請改用
+         <code>python3 scripts/serve.py</code> 起一個本機伺服器再瀏覽。`;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  參數 / 主題 / 事件
+  // ═══════════════════════════════════════════════════════
+  const PIDS = { pUseBands: "useBands", pPeLo: "peLo", pPeMid: "peMid", pPeHi: "peHi",
+                 pPbLo: "pbLo", pPbMid: "pbMid", pPbHi: "pbHi",
+                 pYHi: "yHi", pYMid: "yMid", pYLo: "yLo",
+                 pR: "r", pG: "g", pMos: "mos",
+                 pPsLo: "psLo", pPsMid: "psMid", pPsHi: "psHi",
+                 pFcfLo: "fcfLo", pFcfMid: "fcfMid", pFcfHi: "fcfHi",
+                 pPegLo: "pegLo", pPegMid: "pegMid", pPegHi: "pegHi", pGCap: "gCap",
+                 pGrahamG: "grahamG", pGrahamSpan: "grahamSpan", pCustomEps: "customEps" };
+
+  function readParams() {
+    for (const [id, key] of Object.entries(PIDS)) {
+      const node = $(id);
+      if (!node) continue;
+      if (node.type === "checkbox") {
+        params[key] = node.checked;
+      } else if (node.value.trim() === "") {
+        // 自訂 EPS 是選填的，清空代表「改回自動計算」；其他欄位留空則忽略
+        if (key === "customEps") params[key] = 0;
+      } else {
+        const v = parseFloat(node.value);
+        if (isFinite(v) && (v > 0 || key === "grahamG")) params[key] = v;
+      }
+    }
+    localStorage.setItem("us_params", JSON.stringify(params));
+    if (current) render();
+  }
+  function writeParams() {
+    for (const [id, key] of Object.entries(PIDS)) {
+      const node = $(id);
+      if (!node) continue;
+      if (node.type === "checkbox") node.checked = params[key];
+      else if (key === "customEps") node.value = params[key] > 0 ? params[key] : "";
+      else node.value = params[key];
+    }
+  }
+
+  function initTheme() {
+    const saved = localStorage.getItem("fv_theme");
+    const dark = saved ? saved === "dark"
+                       : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  }
+
+  function bind() {
+    el.q.addEventListener("input", () => {
+      el.clearBtn.hidden = !el.q.value;
+      showSuggest(search(el.q.value), el.q.value);
+    });
+    el.q.addEventListener("focus", () => {
+      if (el.q.value) { el.q.select(); showSuggest(search(el.q.value), el.q.value); }
+    });
+    el.q.addEventListener("blur", () => setTimeout(() => (el.suggest.hidden = true), 120));
+    el.q.addEventListener("keydown", (e) => {
+      const items = [...el.suggest.querySelectorAll("li[data-code]")];
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!items.length) return;
+        e.preventDefault();
+        sugIdx = (sugIdx + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        items.forEach((li, i) => li.classList.toggle("active", i === sugIdx));
+        items[sugIdx].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (items.length) select(items[Math.max(0, sugIdx)].dataset.code);
+      } else if (e.key === "Escape") {
+        el.suggest.hidden = true;
+      }
+    });
+    el.clearBtn.addEventListener("click", () => {
+      el.q.value = ""; el.clearBtn.hidden = true; el.suggest.hidden = true; el.q.focus();
+    });
+    document.querySelectorAll(".chip").forEach((c) =>
+      c.addEventListener("click", () => select(c.dataset.code)));
+
+    Object.keys(PIDS).forEach((id) => {
+      const node = $(id);
+      if (node) node.addEventListener("change", readParams);
+    });
+    el.resetParams.addEventListener("click", () => {
+      params = { ...DEFAULTS };
+      writeParams();
+      localStorage.removeItem("us_params");
+      if (current) render();
+    });
+
+    el.themeBtn.addEventListener("click", () => {
+      const dark = document.documentElement.dataset.theme === "dark";
+      document.documentElement.dataset.theme = dark ? "light" : "dark";
+      localStorage.setItem("fv_theme", dark ? "light" : "dark");
+    });
+    addEventListener("hashchange", () => {
+      const h = decodeURIComponent(location.hash.replace("#", "")).trim().toUpperCase();
+      if (h && INDEX.has(h) && (!current || current.c !== h)) select(h);
+    });
+  }
+
+  // ── 啟動 ────────────────────────────────────────────────
+  initTheme();
+  try {
+    const saved = JSON.parse(localStorage.getItem("us_params") || "null");
+    if (saved) params = { ...DEFAULTS, ...saved };
+    const off = JSON.parse(localStorage.getItem(OFF_KEY) || "null");
+    offMethods = new Set(off === null ? DEFAULT_OFF : off);
+  } catch (_) { /* 忽略毀損的設定 */ }
+  writeParams();
+  bind();
+  boot();
+})();

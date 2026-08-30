@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幾塊你要買？ ｜ 美股</title>
+<meta name="description" content="美股財務計算工具箱：以本益比、股價淨值比、自由現金流、葛拉漢公式等九種公開財務公式，依你自訂的假設參數計算對應股價。財報取自 SEC EDGAR、股價取自那斯達克公開資料，不提供投資建議。">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body data-mode="us">
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">📈</span>
+      <div>
+        <h1>幾塊你要買？</h1>
+        <p class="brand-sub">美股 · 財務計算工具箱 · 九種公式 · 假設參數由你設定</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="datainfo">
+        <span id="dataDate" class="datainfo-date">載入中…</span>
+        <span id="dataCount" class="datainfo-count"></span>
+      </div>
+      <button id="themeBtn" class="btn btn-icon" title="切換深淺色">◐</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <nav class="editions">
+    <span class="editions-label">版本</span>
+    <a href="index.html">計算版</a>
+    <a href="pro.html">專業版</a>
+    <a href="etf.html">ETF</a>
+    <a href="us.html" class="current">美股</a>
+    <span class="editions-hint">這是<strong>美股</strong>版，公式與計算版一一對應、用語同樣中性，
+      只做運算不作評價。資料來源與制度不同，有三處必要的差異，下面那張表列得很清楚。</span>
+  </nav>
+
+  <!-- 與台股版的差異 -->
+  <details class="card explain etf-why">
+    <summary><h3>美股版和台股版哪裡不一樣？</h3></summary>
+    <div class="explain-body">
+      <p>公式本身是同一套財務教科書內容，兩地通用。真正的差別在於
+         <strong>兩個市場公開的東西不一樣</strong>，所以有三處是被資料逼出來的，
+         不是實作偷懶：</p>
+
+      <table class="rules-table etf-fit">
+        <tr><td>每股數字的來源</td><td class="partial">△ 方向相反</td></tr>
+        <tr><td>倍數的參考基準</td><td class="partial">△ 換成同業橫斷面</td></tr>
+        <tr><td>月營收動能法</td><td class="no">✗ 美國沒有月營收，改放自由現金流</td></tr>
+        <tr><td>其他八種公式</td><td class="yes">✓ 完全相同</td></tr>
+      </table>
+
+      <h4>一、每股數字的方向相反</h4>
+      <p>台灣的證交所與櫃買中心<strong>每天直接公布</strong>每一檔的本益比、股價淨值比
+         與現金殖利率，所以台股版是「由比率反推每股數字」：</p>
+      <pre>EPS = 收盤價 ÷ 本益比　　每股淨值 = 收盤價 ÷ 股價淨值比</pre>
+      <p>美國沒有這種官方統計 —— SEC 只收財報，交易所只有價格。所以美股版反過來，
+         先從 SEC 的 XBRL 財報取得每股盈餘、股東權益、營收與現金流，再除以股價算出比率：</p>
+      <pre>本益比 = 股價 ÷ 近四季 EPS　　股價淨值比 = 股價 ÷ 每股淨值
+每股淨值 = 股東權益 ÷ 股數　　股數 = 市值 ÷ 股價</pre>
+      <p>結果是一樣的四個數字，但美股版多了一層自己算的成分，因此
+         <strong>每張卡片都把中間過程完整列出來</strong>，你可以自己核對。</p>
+
+      <h4>二、沒有「近 5 年評價區間」，改用「同業當前分布」</h4>
+      <p>台股版的三組倍數，優先帶入<strong>該股自己近 5 年</strong>本益比、股價淨值比、
+         殖利率的第 20／50／80 百分位 —— 那是這一檔股票自己被市場交易出來的歷史紀錄。
+         美股要做到同一件事，得逐檔抓五年股價（幾千次請求），沒有等量的免費來源。</p>
+      <p>所以這裡換成另一種同樣客觀、但<strong>意義不同</strong>的統計：
+         <strong>同產業所有個股「當前」的第 20／50／80 百分位</strong>。差別務必分清楚：</p>
+      <table class="rules-table etf-fit">
+        <tr><td>台股「近 5 年區間」</td><td class="yes">這檔股票自己的歷史（跨時間）</td></tr>
+        <tr><td>美股「同業當前分布」</td><td class="partial">此刻整個產業的樣子（跨公司）</td></tr>
+      </table>
+      <p>關鍵差異：同業分布<strong>會跟著整個產業一起漲跌</strong>。產業整體在高檔時，
+         中位數也在高檔，拿它當基準不會告訴你「這個產業現在貴不貴」，
+         只告訴你「這檔在同業裡站在哪個位置」。產業分類取自那斯達克的分類，
+         樣本少於 12 檔的產業不計算分位數。你隨時可以在「計算參數」關掉它，
+         改用自己設定的固定倍數。</p>
+
+      <h4>三、月營收動能法換成自由現金流法</h4>
+      <p>台灣規定上市櫃公司每月 10 日前公布上月營收，比季報快約 35 天，
+         是台股最即時的基本面資料 —— 台股版的月營收動能法整個價值就建立在這個「快」上。
+         <strong>美國沒有月營收制度</strong>，只有季報。</p>
+      <p>硬做一個「季營收動能法」不是不行，但推導後會發現它和上面的年化 EPS
+         <strong>完全相同</strong>（季數在分子分母消掉了），等於同一個數字算兩次：</p>
+      <pre>推估年營收 × (累計EPS ÷ 累計營收)
+  = (累計營收 ÷ n季 × 4) × (累計EPS ÷ 累計營收)
+  = 累計EPS ÷ n季 × 4        ← 就是年化 EPS</pre>
+      <p>所以那一格改放美股拿得到、而且其他八種公式都看不到的東西 ——
+         <strong>自由現金流</strong>：</p>
+      <pre>自由現金流 = 營業活動現金流 − 資本支出</pre>
+      <p>盈餘含折舊攤銷與各種應計項目，現金流是真的收到的錢；兩者長期背離通常值得追究。
+         這是美股慣用而台股資料較難取得的指標。</p>
+
+      <h4>還有幾件事要先知道</h4>
+      <ul class="etf-caveats">
+        <li><strong>外國公司的 ADR 沒有資料。</strong>台積電（TSM）、艾司摩爾（ASML）、
+            豐田（TM）這類外國企業以美國存託憑證掛牌，依 20-F 用 <strong>IFRS
+            及當地幣別</strong>申報，不在 SEC 的 us-gaap 彙總表內。要換算還需要匯率與
+            ADR 兌換比例（1 單位 ADR 不等於 1 股原股），這兩項沒有可靠的免費來源 ——
+            <strong>與其算出一個看起來合理卻是錯的數字，本站選擇不算</strong>，
+            查詢這類股票時會直接說明原因。台積電的原股在台股掛牌，
+            可以到<a href="index.html">計算版</a>查 2330。</li>
+        <li><strong>近四季（TTM）是重建出來的。</strong>XBRL 有個結構性缺口：公司的
+            會計年度<strong>第四季通常不會單獨標記</strong>，年報只揭露全年數字。
+            直接把四個日曆季相加，大部分公司會少一季。本站改用
+            「最近完整會計年度 ＋ 該年度結束後的累計 − 去年同期累計」重建，
+            每一檔的個股卡上都會列出實際用到的期間。</li>
+        <li><strong>庫藏股會壓低淨值。</strong>美股大量實施庫藏股，買回的股份直接沖減
+            股東權益，長期買回的公司帳面淨值偏低、股價淨值比與 ROE 因而偏高，
+            極端者（如麥當勞、星巴克）股東權益甚至為負，股價淨值比法與 ROE 法
+            會直接標示不適用。這不是資料錯誤，是這兩個公式碰到了它們的邊界。</li>
+        <li><strong>會計年度不是日曆年。</strong>蘋果的年度在 9 月底結束、輝達在 1 月、
+            微軟在 6 月。卡片上的期間標示是<strong>各公司自己的會計期間</strong>，
+            跨公司比較時要留意基準日不同。</li>
+        <li><strong>股利預扣稅。</strong>美國對外國投資人的股利預扣 30%，
+            實收金額低於本頁顯示的帳面殖利率。本頁不做稅務計算。</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- 搜尋 -->
+  <section class="search-block">
+    <div class="search-box">
+      <span class="search-ico">🔍</span>
+      <input id="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="輸入美股代號或公司名稱，例如 AAPL 或 Apple" aria-label="搜尋美股">
+      <button id="clearBtn" class="search-clear" hidden aria-label="清除">✕</button>
+    </div>
+    <ul id="suggest" class="suggest" hidden></ul>
+    <div class="quickpicks">
+      <span class="quickpicks-label">熱門：</span>
+      <button class="chip" data-code="AAPL">Apple</button>
+      <button class="chip" data-code="MSFT">Microsoft</button>
+      <button class="chip" data-code="NVDA">NVIDIA</button>
+      <button class="chip" data-code="GOOGL">Alphabet</button>
+      <button class="chip" data-code="JPM">JPMorgan</button>
+      <button class="chip" data-code="KO">Coca-Cola</button>
+    </div>
+  </section>
+
+  <div id="loading" class="state-msg">正在載入美股資料…</div>
+  <div id="errorBox" class="state-msg state-error" hidden></div>
+
+  <!-- 結果 -->
+  <section id="result" hidden>
+
+    <!-- 個股概況 -->
+    <div class="card stock-head">
+      <div class="stock-id">
+        <h2><span id="sName">—</span> <span id="sCode" class="code">—</span></h2>
+        <span id="sMarket" class="tag">—</span>
+        <span id="sSector" class="tag tag-quiet">—</span>
+        <span id="sDate" class="tag tag-quiet">—</span>
+      </div>
+      <div class="stock-price">
+        <span class="label">收盤價</span>
+        <strong id="sPrice">—</strong>
+        <span class="unit">美元</span>
+      </div>
+      <dl class="fundamentals">
+        <div><dt>EPS<small>近四季</small></dt><dd id="sEps">—</dd></div>
+        <div><dt>每股淨值<small>最近一季</small></dt><dd id="sBvps">—</dd></div>
+        <div><dt>每股自由現金流<small>最近年度</small></dt><dd id="sFcfps">—</dd></div>
+        <div><dt>現金股利<small>近四季</small></dt><dd id="sDps">—</dd></div>
+        <div><dt>本益比<small>目前</small></dt><dd id="sPe">—</dd></div>
+        <div><dt>股價淨值比<small>目前</small></dt><dd id="sPb">—</dd></div>
+        <div><dt>股價營收比<small>目前</small></dt><dd id="sPs">—</dd></div>
+        <div><dt>現金殖利率<small>目前</small></dt><dd id="sY">—</dd></div>
+        <div><dt>ROE<small>近四季</small></dt><dd id="sRoe">—</dd></div>
+        <div><dt>市值</dt><dd id="sMc">—</dd></div>
+        <div><dt>在外流通股數</dt><dd id="sSh">—</dd></div>
+        <div><dt>財報基準<small>最新一期</small></dt><dd id="sFq">—</dd></div>
+      </dl>
+      <div id="basisNote" class="dilution-note" hidden></div>
+    </div>
+
+    <!-- 綜合結論 -->
+    <div class="card summary">
+      <div class="summary-head">
+        <h3>計算值彙總</h3>
+        <p class="summary-sub">下方各公式在你設定的參數下算出的數值，做<strong>敘述統計</strong>。
+          本站不對這些數值作評價，也不提供買賣建議。勾選卡片可調整納入哪些公式。</p>
+      </div>
+      <div class="summary-grid">
+        <div class="sum-cell lo"><span class="sum-label">最小計算值</span><strong id="tCheap">—</strong></div>
+        <div class="sum-cell mid"><span class="sum-label">中位數</span><strong id="tFair">—</strong></div>
+        <div class="sum-cell hi"><span class="sum-label">最大計算值</span><strong id="tRich">—</strong></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-track">
+          <div class="gauge-seg seg-cheap"></div>
+          <div class="gauge-seg seg-fair"></div>
+          <div class="gauge-seg seg-rich"></div>
+          <div id="gaugeMark" class="gauge-mark" style="left:50%">
+            <span class="gauge-bubble">現價 <b id="gaugePrice">—</b></span>
+          </div>
+        </div>
+        <div class="gauge-scale">
+          <span id="gScaleL" style="left:25%">—</span>
+          <span id="gScaleM" style="left:50%">—</span>
+          <span id="gScaleR" style="left:75%">—</span>
+        </div>
+      </div>
+      <p id="verdict" class="verdict">—</p>
+    </div>
+
+    <!-- 計算公式 -->
+    <div id="methods" class="methods"></div>
+
+    <!-- 參數 -->
+    <details class="card params">
+      <summary><h3>計算參數</h3><span class="params-hint">所有假設都由你設定，改動會立即重算</span></summary>
+      <div class="params-body">
+
+        <div class="param-group">
+          <h4>資料基準</h4>
+          <label class="switch-row">
+            <input type="checkbox" id="pUseBands" checked>
+            <span>優先使用「同產業當前分布」（該產業所有個股此刻的 P20 / P50 / P80）</span>
+          </label>
+          <p class="param-note">
+            這是橫斷面統計，<strong>不等於</strong>台股版的「該股近 5 年區間」——
+            它描述的是「此刻整個產業長什麼樣」，不是這檔股票自己的歷史，
+            也<strong>會跟著整個產業一起漲跌</strong>。產業分類取自那斯達克，
+            樣本少於 12 檔的產業不計算分位數。關閉後一律改用下方你自訂的固定倍數。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>自訂每股盈餘（EPS）</h4>
+          <div class="param-row">
+            <label>預估年度 EPS
+              <input type="number" id="pCustomEps" value="" min="0" max="9999" step="0.01"
+                     placeholder="留空 = 自動"> 美元</label>
+          </div>
+          <p class="param-note">
+            填入數字後，所有以「預估 EPS」為基礎的公式（年化本益比、本益成長比、
+            葛拉漢公式）一律改用你輸入的值，卡片會標示「你輸入的 EPS」。
+            留空則沿用本站依 SEC 季報算出的數字。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>本益比倍數（年化版與近四季版共用）</h4>
+          <div class="param-row">
+            <label>低 <input type="number" id="pPeLo" value="12" min="1" max="200" step="0.5"> 倍</label>
+            <label>中 <input type="number" id="pPeMid" value="20" min="1" max="200" step="0.5"> 倍</label>
+            <label>高 <input type="number" id="pPeHi" value="30" min="1" max="200" step="0.5"> 倍</label>
+          </div>
+          <p class="param-note">
+            預設值高於台股版（10 / 15 / 20），因為美股整體本益比水準本來就比台股高，
+            但這只是一組起點，請自行依產業調整。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>股價淨值比倍數</h4>
+          <div class="param-row">
+            <label>低 <input type="number" id="pPbLo" value="1" min="0.1" max="50" step="0.1"> 倍</label>
+            <label>中 <input type="number" id="pPbMid" value="2.5" min="0.1" max="50" step="0.1"> 倍</label>
+            <label>高 <input type="number" id="pPbHi" value="5" min="0.1" max="50" step="0.1"> 倍</label>
+          </div>
+        </div>
+
+        <div class="param-group">
+          <h4>股價自由現金流比（P/FCF）</h4>
+          <div class="param-row">
+            <label>低 <input type="number" id="pFcfLo" value="15" min="1" max="200" step="1"> 倍</label>
+            <label>中 <input type="number" id="pFcfMid" value="25" min="1" max="200" step="1"> 倍</label>
+            <label>高 <input type="number" id="pFcfHi" value="40" min="1" max="200" step="1"> 倍</label>
+          </div>
+          <p class="param-note">
+            資本支出重的產業（半導體、電信、能源）自由現金流波動大，
+            單一年度的數字容易失真，建議搭配多年趨勢一起看。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>目標現金殖利率</h4>
+          <div class="param-row">
+            <label>高 <input type="number" id="pYHi" value="4" min="0.1" max="30" step="0.05"> %</label>
+            <label>中 <input type="number" id="pYMid" value="2.5" min="0.1" max="30" step="0.05"> %</label>
+            <label>低 <input type="number" id="pYLo" value="1.5" min="0.1" max="30" step="0.05"> %</label>
+          </div>
+          <p class="param-note">
+            殖利率與價格成反比，殖利率設得越高、算出的對應價越低。
+            美股整體殖利率低於台股（大量以庫藏股取代配息），預設值因此較低。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>股價營收比倍數（P/S）</h4>
+          <div class="param-row">
+            <label>低 <input type="number" id="pPsLo" value="1" min="0.05" max="50" step="0.1"> 倍</label>
+            <label>中 <input type="number" id="pPsMid" value="2.5" min="0.05" max="50" step="0.1"> 倍</label>
+            <label>高 <input type="number" id="pPsHi" value="5" min="0.05" max="50" step="0.1"> 倍</label>
+          </div>
+          <p class="param-note">
+            合理倍數因產業差異極大 —— 軟體與雲端常在 5~10 倍以上，
+            零售與通路低於 1 倍。務必依同業水準調整。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>本益成長比（PEG）</h4>
+          <div class="param-row">
+            <label>低 PEG <input type="number" id="pPegLo" value="0.75" min="0.1" max="5" step="0.05"></label>
+            <label>中 PEG <input type="number" id="pPegMid" value="1" min="0.1" max="5" step="0.05"></label>
+            <label>高 PEG <input type="number" id="pPegHi" value="1.5" min="0.1" max="5" step="0.05"></label>
+            <label>成長率上限 <input type="number" id="pGCap" value="40" min="5" max="200" step="5"> %</label>
+          </div>
+          <p class="param-note">
+            PEG = 本益比 ÷ 盈餘成長率。文獻上常以 1 作為對照基準，這裡的三組值
+            由你自行設定。成長率上限用來避免基期過低時算出極端的倍數。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>葛拉漢公式　V = EPS × (8.5 + 2g)</h4>
+          <div class="param-row">
+            <label>成長率 g <input type="number" id="pGrahamG" value="5" min="-4" max="50" step="0.5"> %</label>
+            <label>敏感度 ± <input type="number" id="pGrahamSpan" value="2" min="0" max="20" step="0.5"> %</label>
+          </div>
+          <p class="param-note">
+            8.5 是葛拉漢 1962 年提出的「零成長公司」基準本益比。g 由你自行判斷輸入，
+            本站不替任何個股預設成長率；敏感度用來同時看 g ± 若干百分點的結果。
+          </p>
+        </div>
+
+        <div class="param-group">
+          <h4>ROE 法</h4>
+          <div class="param-row">
+            <label>要求報酬率 r <input type="number" id="pR" value="8" min="1" max="40" step="0.5"> %</label>
+            <label>永續成長率 g <input type="number" id="pG" value="2.5" min="0" max="15" step="0.5"> %</label>
+            <label>安全邊際 <input type="number" id="pMos" value="25" min="0" max="60" step="5"> %</label>
+          </div>
+          <p class="param-note">g 必須小於 r，否則模型無解。</p>
+        </div>
+
+        <button id="resetParams" class="btn btn-ghost btn-sm">還原預設值</button>
+      </div>
+    </details>
+
+    <!-- 方法說明 -->
+    <details class="card explain">
+      <summary><h3>九種公式怎麼算？</h3></summary>
+      <div class="explain-body">
+        <p>公式與台股版一一對應，只有第四種因為美國沒有月營收而換成自由現金流。
+           下面每一段都寫明這個公式在美股的資料來源與邊界。</p>
+
+        <h4>1. 本益比法 —— 年化 EPS（Forward P/E）</h4>
+        <p>近四季 EPS 反映過去一整年；獲利正在成長或衰退的公司，近四季會落後現況。
+           這個方法改用<strong>本會計年度已公布的季報</strong>年化：</p>
+        <pre>年化 EPS = 本年度累計 EPS ÷ 已公布季數 × 4
+對應價   = 年化 EPS × 你設定的本益比倍數</pre>
+        <p>1 季 ×4、2 季 ×2、3 季 ×4/3、4 季就是全年。<strong>季數越少，外推成分越重</strong>，
+           卡片會標明用幾季推算。注意這裡的「年度」是<strong>各公司自己的會計年度</strong> ——
+           蘋果 9 月底結束、輝達 1 月、微軟 6 月，所以每檔的期間標示都不一樣。</p>
+        <p>剛結束一個會計年度、還沒送出新季報的公司（例如年報剛發布時），
+           沒有可年化的對象，這個方法會標示不適用 —— 此時近四季用的就是同一份年報，
+           兩種算法會得到相同的數字，不必重複列出。</p>
+
+        <h4>2. 本益比法 —— 近四季 EPS（Trailing P/E）</h4>
+        <pre>對應價 = 近四季 EPS × 你設定的本益比倍數</pre>
+        <p>用已實現的一整年獲利，不做任何外推，是上面年化版的保守對照組。</p>
+        <p><strong>近四季怎麼來的：</strong>XBRL 有個結構性缺口 —— 公司的會計年度
+           <strong>第四季通常不會單獨標記</strong>（年報只揭露全年數字，Q4 要用
+           「全年 − 前三季」才推得出來），直接把四個日曆季相加，大部分公司會少一季。
+           所以本站改用會計年度重建：</p>
+        <pre>近四季 = 最近完整會計年度
+       + 該年度結束後的累計
+       − 去年同期累計</pre>
+        <p>個股卡上會列出實際用到的年度與季別。若去年同期的季別資料不齊、無法完成扣減，
+           會退回直接採用該會計年度的全年數字，並在卡上標示。</p>
+
+        <h4>3. 本益成長比（PEG Ratio）</h4>
+        <pre>PEG    = 本益比 ÷ 盈餘成長率(%)
+對應價 = 預估 EPS × 成長率(%) × 你設定的目標 PEG</pre>
+        <p>成長率取「預估 EPS ÷ 前一個會計年度 EPS − 1」，並設上限（預設 40%）
+           避免基期過低時算出極端的倍數。<strong>去年虧損或今年衰退時不適用</strong>，
+           景氣循環股也容易在高峰期被高估。</p>
+
+        <h4>4. 自由現金流法（P/FCF）</h4>
+        <pre>自由現金流     = 營業活動現金流 − 資本支出
+每股自由現金流 = 自由現金流 ÷ 股數
+對應價         = 每股自由現金流 × 你設定的 P/FCF 倍數</pre>
+        <p>盈餘含折舊攤銷與各種應計項目，可以在不動用現金的情況下被調整；
+           自由現金流是<strong>真的收進來、扣掉維持營運所需投資之後剩下的錢</strong>。
+           兩者長期背離通常值得追究，這是前面幾種獲利類公式看不到的角度。</p>
+        <p><strong>兩個限制講在前面。</strong>其一，現金流量表在美國是以
+           <strong>年初至今累計</strong>申報，半年與九個月的累計值不在 SEC 的期間彙總表內，
+           所以近四季無法穩定重建 —— 本站取的是<strong>最近一個完整會計年度</strong>的數字，
+           比其他公式舊，卡片上有標期間。其二，銀行與保險公司的現金流量表結構不同，
+           沒有可比的資本支出科目，會標示不適用。大幅擴廠或處分資產的年度也會失真。</p>
+
+        <h4>5. 葛拉漢公式（Graham Formula）</h4>
+        <pre>V = EPS × (8.5 + 2g)</pre>
+        <p><strong>8.5</strong> 是葛拉漢 1962 年觀察到「零成長公司」的基準本益比，
+           <strong>g</strong> 為預期年成長率（%）。本站<strong>不替任何個股預設 g</strong> ——
+           它完全由你在參數區輸入，卡片會同時列出 g ± 敏感度的三組結果。</p>
+        <p>此式是 1960 年代的經驗公式，未考慮利率環境（原著另有以 AAA 公司債殖利率
+           調整的版本），對高成長股會給出很高的倍數。</p>
+
+        <h4>6. ROE 法（股東權益報酬率法）</h4>
+        <pre>ROE            = 近四季淨利 ÷ 股東權益
+模型股價淨值比 = (ROE − g) ÷ (r − g)
+對應價         = 每股淨值 × 模型股價淨值比
+上下限         = 對應價 × (1 ∓ 你設定的安全邊際)</pre>
+        <p>r 是你要求的年報酬率、g 是長期成長率，兩者都由你輸入。
+           <strong>ROE 必須大於 g</strong> 才有意義。</p>
+        <p><strong>美股要特別注意庫藏股。</strong>買回的股份直接沖減股東權益，
+           長期大量買回的公司帳面淨值偏低，ROE 因而被墊高 —— 那不代表它真的
+           比同業會賺錢，只代表它的分母被買小了。極端者股東權益為負，模型直接無解。</p>
+
+        <h4>7. 股價淨值比法（P/B Ratio）</h4>
+        <pre>每股淨值 = 股東權益 ÷ 股數
+對應價   = 每股淨值 × 你選定的股價淨值比倍數</pre>
+        <p>適合資產型、獲利波動大的公司（銀行、保險、房地產、景氣循環股）。
+           帳面淨值不含自行發展的品牌、專利與軟體，所以輕資產公司的 P/B 天生就高；
+           加上前述的庫藏股效應，美股的 P/B 比台股更難跨產業比較。</p>
+
+        <h4>8. 股價營收比（P/S Ratio）</h4>
+        <pre>每股營收 = 近四季營收 ÷ 股數
+對應價   = 每股營收 × 你選定的股價營收比倍數</pre>
+        <p>營收<strong>恆為正</strong>，所以獲利尚未轉正的公司也估得出來 ——
+           這是其他獲利類方法完全無解的族群，美股的軟體與生技業有大量這種公司。</p>
+        <p><strong>本法預設不納入彙總。</strong>合理倍數因產業差異極大，
+           沒有一組通用預設值。請先確認同業水準再勾選納入。它完全不看獲利能力，
+           營收高但長年虧損的公司會被高估。</p>
+
+        <h4>9. 股利法（現金股利折現）</h4>
+        <pre>對應價 = 每股現金股利 ÷ 你設定的目標殖利率</pre>
+        <p>殖利率與價格成反比，最高的目標殖利率對應最低的價格。
+           適合配息穩定的成熟公司。</p>
+        <p>美股有兩點和台股不同：一是<strong>大量成長股完全不配息</strong>，
+           改以庫藏股回饋股東，這個公式對它們沒有意義；二是美國對外國投資人
+           <strong>預扣 30% 股利稅</strong>，實收金額低於本頁顯示的帳面殖利率。</p>
+
+        <h4>數字怎麼來的</h4>
+        <p>財報取自 SEC EDGAR 的 XBRL 彙總表（frames API），股價與市值取自
+           那斯達克官方選股器，每股數字由兩者組合：</p>
+        <pre>股數     = 市值 ÷ 股價
+每股淨值 = 股東權益 ÷ 股數
+每股營收 = 近四季營收 ÷ 股數
+EPS      = SEC 申報的稀釋後每股盈餘（近四季重建）
+ROE      = 近四季淨利 ÷ 股東權益</pre>
+        <p>股數用「市值 ÷ 股價」而非直接取財報的在外流通股數，是為了處理
+           <strong>雙重股權</strong>：波克夏 A 股與 B 股價格相差 1,500 倍，
+           這樣算出來的兩邊會自動換算成一致的口徑。若公司申報的每股盈餘與這個股數
+           對不起來（差距超過兩倍），本站改用「近四季淨利 ÷ 股數」，並在卡片上標示。</p>
+      </div>
+    </details>
+
+  </section>
+
+  <section id="empty" class="empty">
+    <p class="empty-ico">🇺🇸</p>
+    <p>輸入美股代號或公司名稱開始計算</p>
+    <p class="empty-sub">收錄紐約證交所、那斯達克與 CBOE 掛牌的普通股，
+      財報來自 SEC EDGAR、股價來自那斯達克公開資料</p>
+  </section>
+
+</main>
+
+<footer class="foot wrap">
+  <p class="disclaimer">
+    <strong>免責聲明：</strong>本站是<strong>財務計算工具</strong>，功能為對公開財務數字執行
+    使用者指定的四則運算並顯示結果。所有倍數、成長率、目標殖利率等假設<strong>均由使用者自行設定</strong>，
+    本站不對任何個股設定價位、不對計算結果作出評價、不推介標的、不提供買賣時點，
+    <strong>不構成投資建議、分析意見或買賣要約</strong>。
+    公式為公開的財務教科書內容，其假設與限制無法反映產業前景、一次性損益、公司治理等因素，
+    計算結果與實際價值可能有重大差異。投資美股另有匯率風險與 30% 股利預扣稅，本站不做這些計算。
+    使用者應自行查證原始資料並自負決策責任。
+  </p>
+  <p class="foot-src">
+    資料來源：美國證券交易委員會（SEC）EDGAR XBRL frames API 之財報資料、
+    那斯達克交易所公開之收盤行情與市值。盤後更新，非即時報價。
+    外國發行人（ADR）依 20-F 以 IFRS 申報，不在收錄範圍內。
+    本站不保證資料完整與正確，請以 SEC 原始申報文件與交易所公告為準。
+  </p>
+</footer>
+
+<script src="assets/us.js"></script>
+</body>
+</html>

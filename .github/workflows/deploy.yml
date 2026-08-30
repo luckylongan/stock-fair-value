@@ -3,6 +3,8 @@ name: 更新股價資料並部署
 on:
   # 台股收盤 13:30、證交所盤後資料約 14:30 之後齊全。
   # cron 使用 UTC：07:20 UTC = 15:20 台北時間，週一到週五各跑一次。
+  # 這個時間點美股尚未開盤，所以同一班排程抓到的美股資料是「前一個美股交易日」
+  # 的收盤價 —— 頁面右上角一律標示實際的資料日期，不是壞掉了。
   schedule:
     - cron: "20 7 * * 1-5"
   # 手動觸發（GitHub 網頁的 Actions 分頁按 Run workflow）
@@ -56,6 +58,17 @@ jobs:
       # ETF 淨值來自證交所即時系統，可能擋雲端 IP，失敗不影響其他資料
       - name: 抓取 ETF 淨值與折溢價
         run: python3 scripts/fetch_etf.py
+        continue-on-error: true
+
+      # 美股：SEC EDGAR 的財報 + 那斯達克的收盤價，約需 1~2 分鐘。
+      # 兩個來源都在美國，失敗時保留既有的 data/us*.json，不影響台股。
+      - name: 抓取美股財報與股價
+        run: python3 scripts/fetch_us.py
+        # SEC 的存取規範要求 User-Agent 帶聯絡方式。到 repo 的
+        # Settings → Secrets and variables → Actions 新增名為 SEC_CONTACT
+        # 的 secret（填你的 email）就會自動帶上；沒設也能跑，只是流量是匿名的。
+        env:
+          SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
         continue-on-error: true
 
       - name: 重建歷史評價區間（僅在手動勾選或每月 1 日）
