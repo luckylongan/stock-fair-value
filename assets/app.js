@@ -140,6 +140,14 @@
       count: (n) => `${n} 檔上市櫃個股`,
       closeOn: (d) => `收盤 ${d}`,
       includeAria: "是否納入綜合評估",
+      mgPeriod: "期間", mgGross: "毛利率", mgOper: "營業利益率",
+      mgNote: "毛利率＝營業毛利 ÷ 營業收入；營業利益率＝營業利益 ÷ 營業收入。" +
+              "金融保險業沒有可比的營收與毛利概念，因此不顯示。",
+      mgTrend: (y0, v0, y1, v1, d) =>
+        `營業利益率由 ${y0}的 <b>${fmt(v0, 1)}%</b> ${d < 0 ? "降至" : "升至"} ` +
+        `${y1}的 <b>${fmt(v1, 1)}%</b>（${d < 0 ? "減少" : "增加"} ` +
+        `<b>${fmt(Math.abs(d), 1)} 個百分點</b>）。` +
+        `利潤率變動時，同樣的營收會對應到不同的每股盈餘 —— 上方以盈餘為基礎的公式全部會跟著移動。<br>`,
       scaleMin: "最小", scaleMid: "中位數", scaleMax: "最大",
       usedCount: (n) => `納入 ${n} 種公式`,
       scaleCheap: "便宜", scaleFair: "合理", scaleRich: "昂貴",
@@ -398,6 +406,15 @@
       count: (n) => `${n} TWSE / TPEx stocks`,
       closeOn: (d) => `close ${d}`,
       includeAria: "Include in the summary",
+      mgPeriod: "Period", mgGross: "Gross margin", mgOper: "Operating margin",
+      mgNote: "Gross margin = gross profit ÷ revenue; operating margin = operating income ÷ revenue. " +
+              "Financial and insurance companies have no comparable revenue or gross profit, so nothing is shown.",
+      mgTrend: (y0, v0, y1, v1, d) =>
+        `Operating margin ${d < 0 ? "fell" : "rose"} from <b>${fmt(v0, 1)}%</b> in ${y0} to ` +
+        `<b>${fmt(v1, 1)}%</b> in ${y1} (${d < 0 ? "down" : "up"} ` +
+        `<b>${fmt(Math.abs(d), 1)} percentage points</b>). ` +
+        `When margin moves, the same revenue produces a different EPS — and every earnings-based ` +
+        `formula above moves with it.<br>`,
       scaleMin: "Min", scaleMid: "Median", scaleMax: "Max",
       usedCount: (n) => `${n} formula${n === 1 ? "" : "s"} included`,
       scaleCheap: "Cheap", scaleFair: "Fair", scaleRich: "Expensive",
@@ -1077,6 +1094,7 @@
     el.sEps.textContent = s.eps ? nt(s.eps) : "—";
     el.sBvps.textContent = s.bvps ? nt(s.bvps) : "—";
     renderDilution(s);
+    renderMarginTable(marginRows(s.c));
     el.sRoe.textContent = s.roe ? fmt(s.roe) + " %" : "—";
     el.sDps.textContent = s.d ? nt(s.d) : "—";
     el.sPe.textContent = s.pe ? fmt(s.pe) + X() : "—";
@@ -1282,6 +1300,68 @@
       `${head}${pick("。", ".")}<br>${action}` +
       outlierNote(s, allPro, results) + M().proNote(used.length) +
       (used.length <= 2 ? M().proThin(used.length) : "");
+  }
+
+  /* 獲利品質：毛利率與營業利益率的走勢
+   *
+   * 刻意不做成第十二種公式，也不進彙總統計 —— 它不是估價指標，
+   * 而是「各公式分母的那個盈餘，品質如何」。特斯拉是最好的例子：
+   * 營收幾乎沒掉，但營業利益率一路壓縮，EPS 就是這樣掉下來的。
+   *
+   * rows: [[期間標籤, 毛利率, 營業利益率], ...]（百分比，可為 null）
+   */
+  /** 從逐期財報組出利潤率欄位：年度（Q4）最多三期，再加上最新一期非年度的。
+   *  年度之間才好比較，但最新一期通常是使用者最想看的，所以一起列。 */
+  function marginRows(code) {
+    const h = QHISTORY[code] || {};
+    const usable = Object.entries(h)
+      .filter(([, v]) => v.r > 0 && (v.g != null || v.o != null))
+      .map(([k, v]) => {
+        const [y, q] = k.split("/").map(Number);
+        return { y, q, key: k,
+                 g: v.g != null ? (v.g / v.r) * 100 : null,
+                 o: v.o != null ? (v.o / v.r) * 100 : null };
+      })
+      .sort((a, b) => (a.y - b.y) || (a.q - b.q));
+    if (!usable.length) return [];
+    const annual = usable.filter((x) => x.q === 4).slice(-3);
+    const last = usable[usable.length - 1];
+    const rows = [...annual];
+    if (last.q !== 4) rows.push(last);
+    // 期間標籤：中文用民國年（和站上其他地方一致），英文換成西元才看得懂
+    const label = (x) => (L() === "en"
+      ? (x.q === 4 ? `FY${x.y + 1911}` : `${x.y + 1911}Q${x.q}`)
+      : (x.q === 4 ? `${x.y} 年` : `${x.y}Q${x.q}`));
+    return rows.map((x) => [label(x), x.g, x.o]);
+  }
+
+  function renderMarginTable(rows) {
+    const box = $("marginBox");
+    if (!box) return;
+    if (!rows || !rows.length) { box.hidden = true; return; }
+    const pct = (v) => (v === null || v === undefined || !isFinite(v))
+      ? "—" : fmt(v, 1) + "%";
+    $("mgHead").innerHTML =
+      `<th>${M().mgPeriod}</th>` +
+      rows.map((r, i) => `<th${i === rows.length - 1 ? ' class="now"' : ""}>${r[0]}</th>`).join("");
+    const line = (label, idx) =>
+      `<tr><td>${label}</td>` +
+      rows.map((r, i) => `<td${i === rows.length - 1 ? ' class="now"' : ""}>${pct(r[idx])}</td>`).join("") +
+      `</tr>`;
+    $("mgBody").innerHTML = line(M().mgGross, 1) + line(M().mgOper, 2);
+
+    // 只描述走勢，不評價。用第一個與最後一個都有值的點比較。
+    const pts = rows.map((r) => r[2]).map((v, i) => [i, v]).filter(([, v]) => v != null);
+    let note = M().mgNote;
+    if (pts.length >= 2) {
+      const a = pts[0], b = pts[pts.length - 1];
+      const diff = b[1] - a[1];
+      if (Math.abs(diff) >= 1) {
+        note = M().mgTrend(rows[a[0]][0], a[1], rows[b[0]][0], b[1], diff) + note;
+      }
+    }
+    $("mgNote").innerHTML = note;
+    box.hidden = false;
   }
 
   /* 現價落在所有計算值之外時的說明

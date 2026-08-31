@@ -602,3 +602,36 @@ html[data-lang="en"] .i18n-en { display: revert !important; }
   .minibar { top: 53px; font-size: 12px; padding: 8px 12px; gap: 10px; }
   .minibar-count { margin-left: 0; width: 100%; }
 }
+
+
+/* ── 獲利品質（毛利率／營業利益率）─────────────────────────
+   刻意和上面的估價卡分開呈現：這不是估價指標，不進彙總統計。
+   它回答的是另一個問題 —— 各公式分母的那個「盈餘」品質如何。 */
+.margins {
+  margin-top: 14px; border: 1px solid var(--border); border-radius: 11px;
+  background: var(--surface-2); padding: 12px 15px 14px;
+}
+.margins-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.margins-head h4 { margin: 0; font-size: 13px; }
+.margins-head .margins-sub { font-size: 11.5px; color: var(--text-dim); }
+.margins-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.margins-table th, .margins-table td {
+  padding: 5px 8px; text-align: right; font-variant-numeric: tabular-nums;
+}
+.margins-table th:first-child, .margins-table td:first-child {
+  text-align: left; color: var(--text-mid); font-weight: 600; white-space: nowrap;
+}
+.margins-table thead th {
+  font-size: 11px; color: var(--text-dim); font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.margins-table tbody td { font-weight: 650; }
+.margins-table .now { color: var(--accent); }
+.margins-note { margin: 10px 0 0; font-size: 11.5px; color: var(--text-dim); line-height: 1.65; }
+.margins-note b { color: var(--text-mid); }
+@media (max-width: 640px) {
+  .margins-table { font-size: 12px; }
+  .margins-table th, .margins-table td { padding: 4px 5px; }
+}

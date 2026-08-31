@@ -172,6 +172,14 @@
       shares: "股",
       includeAria: "是否納入計算值彙總",
       colLo: "低", colMid: "中", colHi: "高",
+      mgPeriod: "期間", mgGross: "毛利率", mgOper: "營業利益率",
+      mgNote: "毛利率＝營業毛利 ÷ 營業收入；營業利益率＝營業利益 ÷ 營業收入。" +
+              "金融保險業沒有可比的營收與毛利概念，因此不顯示。",
+      mgTrend: (y0, v0, y1, v1, d) =>
+        `營業利益率由 ${y0}的 <b>${fmt(v0, 1)}%</b> ${d < 0 ? "降至" : "升至"} ` +
+        `${y1}的 <b>${fmt(v1, 1)}%</b>（${d < 0 ? "減少" : "增加"} ` +
+        `<b>${fmt(Math.abs(d), 1)} 個百分點</b>）。` +
+        `利潤率變動時，同樣的營收會對應到不同的每股盈餘 —— 上方以盈餘為基礎的公式全部會跟著移動。<br>`,
       scaleMin: "最小", scaleMid: "中位數", scaleMax: "最大",
       usedCount: (n) => `納入 ${n} 種公式`,
       noteTtm: (fyl, fy, fye, n, ytd, l, eps) =>
@@ -364,6 +372,15 @@
       shares: "",
       includeAria: "Include in the summary",
       colLo: "Low", colMid: "Mid", colHi: "High",
+      mgPeriod: "Period", mgGross: "Gross margin", mgOper: "Operating margin",
+      mgNote: "Gross margin = gross profit ÷ revenue; operating margin = operating income ÷ revenue. " +
+              "Financial and insurance companies have no comparable revenue or gross profit, so nothing is shown.",
+      mgTrend: (y0, v0, y1, v1, d) =>
+        `Operating margin ${d < 0 ? "fell" : "rose"} from <b>${fmt(v0, 1)}%</b> in ${y0} to ` +
+        `<b>${fmt(v1, 1)}%</b> in ${y1} (${d < 0 ? "down" : "up"} ` +
+        `<b>${fmt(Math.abs(d), 1)} percentage points</b>). ` +
+        `When margin moves, the same revenue produces a different EPS — and every earnings-based ` +
+        `formula above moves with it.<br>`,
       scaleMin: "Min", scaleMid: "Median", scaleMax: "Max",
       usedCount: (n) => `${n} formula${n === 1 ? "" : "s"} included`,
       noteTtm: (fyl, fy, fye, n, ytd, l, eps) =>
@@ -854,6 +871,8 @@
     el.sSh.textContent = s.sh ? shares(s.sh) + M().shares : "—";
     el.sFq.textContent = lbl(s.fq);
     renderBasisNote(s);
+    // s.mg 已經是 [[年度, 毛利率, 營業利益率], ...]，後端算好了
+    renderMarginTable(s.mg);
 
     const results = {};
     el.methods.innerHTML = "";
@@ -969,6 +988,43 @@
     document.addEventListener("langchange", update);
     update();
     return update;
+  }
+
+  /* 獲利品質：毛利率與營業利益率的走勢
+   *
+   * 刻意不做成第十二種公式，也不進彙總統計 —— 它不是估價指標，
+   * 而是「各公式分母的那個盈餘，品質如何」。特斯拉是最好的例子：
+   * 營收幾乎沒掉，但營業利益率一路壓縮，EPS 就是這樣掉下來的。
+   *
+   * rows: [[期間標籤, 毛利率, 營業利益率], ...]（百分比，可為 null）
+   */
+  function renderMarginTable(rows) {
+    const box = $("marginBox");
+    if (!box) return;
+    if (!rows || !rows.length) { box.hidden = true; return; }
+    const pct = (v) => (v === null || v === undefined || !isFinite(v))
+      ? "—" : fmt(v, 1) + "%";
+    $("mgHead").innerHTML =
+      `<th>${M().mgPeriod}</th>` +
+      rows.map((r, i) => `<th${i === rows.length - 1 ? ' class="now"' : ""}>${r[0]}</th>`).join("");
+    const line = (label, idx) =>
+      `<tr><td>${label}</td>` +
+      rows.map((r, i) => `<td${i === rows.length - 1 ? ' class="now"' : ""}>${pct(r[idx])}</td>`).join("") +
+      `</tr>`;
+    $("mgBody").innerHTML = line(M().mgGross, 1) + line(M().mgOper, 2);
+
+    // 只描述走勢，不評價。用第一個與最後一個都有值的點比較。
+    const pts = rows.map((r) => r[2]).map((v, i) => [i, v]).filter(([, v]) => v != null);
+    let note = M().mgNote;
+    if (pts.length >= 2) {
+      const a = pts[0], b = pts[pts.length - 1];
+      const diff = b[1] - a[1];
+      if (Math.abs(diff) >= 1) {
+        note = M().mgTrend(rows[a[0]][0], a[1], rows[b[0]][0], b[1], diff) + note;
+      }
+    }
+    $("mgNote").innerHTML = note;
+    box.hidden = false;
   }
 
   /* 現價落在所有計算值之外時的說明

@@ -436,6 +436,22 @@ def main():
     ocf_a = series("NetCashProvidedByUsedInOperatingActivities", "USD", [], years)
     capex_a = series("PaymentsToAcquirePropertyPlantAndEquipment", "USD", [], years)
 
+    # 毛利率與營業利益率。這不是估價指標 —— 它不進彙總統計，只回答一件事：
+    # 各公式分母的那個「盈餘」品質如何。特斯拉是最好的例子：營收幾乎沒掉
+    # （2024 977 億 → 2025 948 億），但營業利益率從 7.2% 壓到 4.6%，
+    # EPS 就是這樣從 2.04 掉到 1.08 的，存貨完全看不出來。
+    # 銀行與保險沒有毛利概念，這兩欄會是空的。
+    # 趨勢要看三年才有意義，而 years 的最後一個（當年度）幾乎沒人申報年報，
+    # 所以往前多抓一年當作第三個點。
+    myears = ["CY%d" % (int(years[0][2:]) - 1)] + list(years)
+    print("== 毛利與營業利益（年度，算利潤率用）==")
+    gp_a = series("GrossProfit", "USD", [], myears)
+    op_a = series("OperatingIncomeLoss", "USD", [], myears)
+    print("   多補一年的營收（算最早那個點的利潤率）")
+    rev_extra = {}
+    for t in rev_a:
+        rev_extra[t] = series(t, "USD", [], [myears[0]])
+
     print("== 股東權益（時點）==")
     equity = instant("StockholdersEquity", "USD", quarters[-4:])
     equity2 = instant(
@@ -535,6 +551,24 @@ def main():
         s["roe"] = round(s["ni"] / s["eq"] * 100, 2) if (s["ni"] and s["eq"] and s["eq"] > 0) else None
         s["y"] = round(s["d"] / p * 100, 3) if s["d"] else None
         s["fq"] = (e["ytdl"] if e and e["ytdl"] else (e["fyl"] if e else None))
+
+        # 利潤率趨勢：逐年度取 毛利 ÷ 營收、營業利益 ÷ 營收，最多三年。
+        # 只有同一年度的營收與毛利都在才算，避免拿不同期間相除。
+        margins = []
+        for yp in myears:
+            src = rev_a[tag] if (tag and yp in rev_a[tag]) else (rev_extra.get(tag) or {})
+            rv = src.get(yp, {}).get(cik) if tag else None
+            if not rv or rv[0] <= 0:
+                continue
+            g = gp_a.get(yp, {}).get(cik)
+            o = op_a.get(yp, {}).get(cik)
+            if g is None and o is None:
+                continue
+            margins.append([yp[2:],
+                            round(g[0] / rv[0] * 100, 1) if g is not None else None,
+                            round(o[0] / rv[0] * 100, 1) if o is not None else None])
+        if margins:
+            s["mg"] = margins[-3:]
 
         # 供前端做「年化」「成長率」「營收動能」的明細，另存一檔
         rec = {}

@@ -100,12 +100,20 @@ def collect(url_tmpl, market):
             rev = fnum(r.get("營業收入"))
             net = next((fnum(r[k]) for k in r
                         if k.startswith("淨利") and "歸屬於母公司業主" in k), None)
+            # 毛利取「淨額」版（已沖銷未實現／已實現銷貨損益）；沒有就退回未沖銷的
+            gp = next((fnum(r[k]) for k in r
+                       if k.startswith("營業毛利") and "淨額" in k), None)
+            if gp is None:
+                gp = next((fnum(r[k]) for k in r if k.startswith("營業毛利")), None)
+            op = next((fnum(r[k]) for k in r if k.startswith("營業利益")), None)
             key = (int(y), int(q))
             cur = out.get(code)
             if cur is None or key > (cur["y"], cur["q"]):
                 out[code] = {"y": int(y), "q": int(q), "cum": round(eps, 4),
                              "rev": round(rev, 2) if rev and rev > 0 else None,
                              "ni": round(net, 2) if net else None,
+                             "gp": round(gp, 2) if gp is not None else None,
+                             "op": round(op, 2) if op is not None else None,
                              "m": market}
                 n += 1
         print("   %-6s %4d 筆" % (sec, n))
@@ -164,6 +172,13 @@ def parse_mops(page):
         # 淨利欄名有「淨利（淨損）歸屬於母公司業主」與「淨利（損）…」兩種寫法
         ni = next((j for j, h in enumerate(hdr)
                    if h.startswith("淨利") and "歸屬於母公司業主" in h), None)
+        # 毛利率與營益率用。取「營業毛利（毛損）淨額」而非未沖銷的「營業毛利（毛損）」——
+        # 前者已扣除未實現／已實現銷貨損益，跨公司比較才一致。
+        # 金融保險業的表沒有這兩欄（他們報的是利息淨收益），會是 None。
+        gi = next((j for j, h in enumerate(hdr) if h.startswith("營業毛利") and "淨額" in h), None)
+        if gi is None:
+            gi = next((j for j, h in enumerate(hdr) if h.startswith("營業毛利")), None)
+        oi = next((j for j, h in enumerate(hdr) if h.startswith("營業利益")), None)
         for r in rows[1:]:
             cells = [strip_tags(c) for c in
                      re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, re.S)]
@@ -177,9 +192,14 @@ def parse_mops(page):
                 continue
             rev = fnum(cells[ri]) if (ri is not None and len(cells) > ri) else None
             net = fnum(cells[ni]) if (ni is not None and len(cells) > ni) else None
+            gp = fnum(cells[gi]) if (gi is not None and len(cells) > gi) else None
+            op = fnum(cells[oi]) if (oi is not None and len(cells) > oi) else None
             out[code] = {"eps": round(eps, 4),
                          "rev": round(rev, 2) if rev and rev > 0 else None,
-                         "ni": round(net, 2) if net else None}
+                         "ni": round(net, 2) if net else None,
+                         # 毛利與營業利益可能為負（虧損），不能用 `if x > 0` 過濾
+                         "gp": round(gp, 2) if gp is not None else None,
+                         "op": round(op, 2) if op is not None else None}
     return out
 
 
@@ -195,7 +215,7 @@ def collect_mops(year, season, typek, market):
     nrev = sum(1 for v in rows.values() if v["rev"])
     print("   %s %d/Q%d  %4d 筆（含營收 %d）" % (market, year, season, len(rows), nrev))
     return {c: {"y": year, "q": season, "cum": v["eps"], "rev": v["rev"],
-                "ni": v["ni"], "m": market}
+                "ni": v["ni"], "gp": v["gp"], "op": v["op"], "m": market}
             for c, v in rows.items()}
 
 
@@ -233,10 +253,12 @@ def main():
 
     # 最近三季每天都要抓：公司陸續申報，內容會變
     periods = list(recent_periods(3))
-    # 年度基準（Q4 全年）只用來算成長率，抓過就不必重抓
+    # 年度基準（Q4 全年）用來算成長率與毛利率趨勢，抓過就不必重抓。
+    # 判斷條件看的是「有沒有毛利欄」而不是「有沒有這一期」—— 舊版檔案存的
+    # 期別沒有 g/o 兩欄，只檢查 key 在不在會永遠不回補。
     for y, q in annual_periods(2):
         key = "%d/%d" % (y, q)
-        if sum(1 for h in history.values() if key in h) < 100:
+        if sum(1 for h in history.values() if "g" in (h.get(key) or {})) < 100:
             periods.append((y, q))
 
     print("== 公開資訊觀測站（逐季回補）==")
@@ -262,6 +284,11 @@ def main():
             rec["r"] = e["rev"]
         if e.get("ni"):
             rec["n"] = e["ni"]
+        # 毛利／營業利益：0 與負值都要保留，只有「沒有這一欄」才略過
+        if e.get("gp") is not None:
+            rec["g"] = e["gp"]
+        if e.get("op") is not None:
+            rec["o"] = e["op"]
         h["%d/%d" % (e["y"], e["q"])] = rec
 
         cur = merged.get(code)
@@ -271,7 +298,9 @@ def main():
             merged[code] = e; updated += 1
         elif (e["y"], e["q"]) == (cur["y"], cur["q"]) and (
                 (cur.get("rev") is None and e.get("rev") is not None) or
-                (cur.get("ni") is None and e.get("ni") is not None)):
+                (cur.get("ni") is None and e.get("ni") is not None) or
+                (cur.get("gp") is None and e.get("gp") is not None) or
+                (cur.get("op") is None and e.get("op") is not None)):
             # 同一期但補到了營收／淨利（舊版檔案沒有這些欄），一併補上
             merged[code] = e; updated += 1
 
@@ -290,6 +319,8 @@ def main():
         "note": ("cum 為該公司當年度累計基本每股盈餘（非單季），rev 為累計營業收入、"
                  "ni 為歸屬母公司累計淨利（皆千元，金融保險業無 rev）；"
                  "年化 EPS = cum ÷ q × 4；每股營收 = cum × rev ÷ ni。"
+                 "gp 為累計營業毛利淨額、op 為累計營業利益（皆千元，可為負），"
+                 "供計算毛利率與營業利益率；金融保險業無此兩欄。"
                  "history 逐期保存，供計算年增率。各公司申報進度不同，本檔逐次累積。"),
         "count": len(merged),
         "periods": {"%d/%d" % k: v for k, v in sorted(dist.items(), reverse=True)},
