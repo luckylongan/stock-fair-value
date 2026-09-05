@@ -635,3 +635,14 @@ html[data-lang="en"] .i18n-en { display: revert !important; }
   .margins-table { font-size: 12px; }
   .margins-table th, .margins-table td { padding: 4px 5px; }
 }
+
+
+/* ── 瀏覽人次 ───────────────────────────────────────────────
+   徽章自帶背景色，所以標籤與數值都用中間調（slate / accent），
+   深淺兩種主題下都讀得到，不必為了換色而載入第二張圖 ——
+   那會讓每次瀏覽被記成兩次。 */
+.hitbox {
+  margin: 14px 0 0; display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: var(--text-dim);
+}
+.hitbox .hitcount { display: block; height: 18px; width: auto; border-radius: 4px; }

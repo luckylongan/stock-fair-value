@@ -244,7 +244,7 @@ P20／P50／P80**（本益比、股價淨值比、股價營收比、P/FCF、殖�
 
 ### 1. 建立 GitHub repo
 
-到 <https://github.com/new> 建一個 repo。**名稱請用英文**（例如 `stock-fair-value`），
+到 <https://github.com/new> 建一個 repo。**名稱請用英文**（例如 `stock`），
 中文名稱在網址上會被編碼成亂碼。可以是 Public 或 Private，兩者都能開 Pages。
 不要勾選 "Add a README file"。
 
@@ -253,7 +253,7 @@ P20／P50／P80**（本益比、股價淨值比、股價營收比、P/FCF、殖�
 在專案資料夾執行（把網址換成你自己的 repo）：
 
 ```bash
-git remote add origin https://github.com/<你的帳號>/stock-fair-value.git && git branch -M main && git push -u origin main
+git remote add origin https://github.com/<你的帳號>/stock.git && git branch -M main && git push -u origin main
 ```
 
 ### 3. 開啟 GitHub Pages
@@ -275,7 +275,7 @@ git remote add origin https://github.com/<你的帳號>/stock-fair-value.git && 
 跑完後網站就在：
 
 ```
-https://<你的帳號>.github.io/stock-fair-value/
+https://<你的帳號>.github.io/stock/
 ```
 
 之後每個交易日 **台北時間 15:20** 會自動更新資料並重新部署，不需要再手動操作。
@@ -681,6 +681,35 @@ python3 scripts/build_bands.py --years 5
 └── .github/workflows/
     └── deploy.yml          每交易日更新 + 部署 Pages
 ```
+
+---
+
+## 瀏覽人次
+
+頁尾有一個瀏覽人次計數，由 [hits.sh](https://hits.sh) 提供 —— 純靜態網站沒有後端，
+自己記不了數，一定得靠外部服務。
+
+**這是全站唯一一個對外送出資料的地方，值得說清楚。**站上其他所有東西都在你的
+瀏覽器裡算完，`data/*.json` 讀進來之後不會再往外送任何東西。加上計數之後，
+每次開啟頁面會向 hits.sh 請求一張徽章圖片，**該服務會看到你的 IP 與來源網址**。
+所以頁尾的資料來源那段也加了一行揭露，四頁都有。
+
+實作上有三個細節：
+
+**不用 `loading="lazy"`。**徽章在頁尾，設成延遲載入的話，使用者沒捲到底就不會
+發出請求，人次會大量漏記。
+
+**徽章只顯示數字，「瀏覽人次」四個字是頁面自己的 HTML 文字。**因為標籤是寫在
+圖片網址的參數裡的，如果連標籤一起做中英切換，切換語言就會換一次網址、
+**多記一次人次**。把標籤拆出來之後圖片網址永遠不變。
+
+**服務掛掉不留破圖。**`i18n.js` 對徽章掛了 `error` 監聽，載入失敗就把整塊隱藏。
+
+計數的 key 是 `luckylongan.github.io/stock`，四頁共用，所以顯示的是全站總瀏覽次數
+（不是不重複訪客）。開發時測過幾次，起始值不是 0。
+
+想換成更完整的分析（不重複訪客、來源、熱門頁面），[GoatCounter](https://www.goatcounter.com)
+與 Cloudflare Web Analytics 都是不用 Cookie 的選擇，但都需要註冊帳號。
 
 ---
 

@@ -31,14 +31,17 @@
   /** 屬性類的翻譯：第一次切換前先把中文原值收好，才切得回來。 */
   const ATTRS = [["data-ph-en", "placeholder"],
                  ["data-title-en", "title"],
-                 ["data-aria-en", "aria-label"]];
+                 ["data-aria-en", "aria-label"],
+                 ["data-alt-en", "alt"]];
 
   function applyAttrs() {
     for (const [dataAttr, target] of ATTRS) {
       document.querySelectorAll("[" + dataAttr + "]").forEach((el) => {
         const stash = "zh" + target.replace(/-/g, "");
         if (el.dataset[stash] === undefined) el.dataset[stash] = el.getAttribute(target) || "";
-        el.setAttribute(target, lang === "en" ? el.getAttribute(dataAttr) : el.dataset[stash]);
+        const want = lang === "en" ? el.getAttribute(dataAttr) : el.dataset[stash];
+        // 值沒變就別重設 —— 對 <img src> 來說重設可能觸發重新請求
+        if (el.getAttribute(target) !== want) el.setAttribute(target, want);
       });
     }
   }
@@ -94,8 +97,19 @@
   root.dataset.lang = lang;
   root.setAttribute("lang", lang === "en" ? "en" : "zh-Hant");
 
+  /** 計數服務掛掉時不要在頁尾留一個破圖 */
+  function guardCounter() {
+    document.querySelectorAll("img.hitcount").forEach((img) => {
+      img.addEventListener("error", () => {
+        const box = img.closest(".hitbox") || img;
+        box.hidden = true;
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     apply();
+    guardCounter();
     const btn = document.getElementById("langBtn");
     if (btn) {
       btn.addEventListener("click", () => {

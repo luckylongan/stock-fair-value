@@ -59,7 +59,7 @@ NY = timezone(timedelta(hours=-4))     # 美東（估個大概，只用來標記
 # 沒設也能跑（實測 SEC 目前不會擋），但流量就是匿名的，對方要限流時
 # 沒辦法通知你。另外注意 UA 裡不能放網址，SEC 的防護會直接回 403。
 SEC_CONTACT = os.environ.get("SEC_CONTACT", "").strip()
-SEC_UA = "stock-fair-value/1.0" + (" " + SEC_CONTACT if SEC_CONTACT else "")
+SEC_UA = "geikuai-stock/1.0" + (" " + SEC_CONTACT if SEC_CONTACT else "")
 WEB_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
