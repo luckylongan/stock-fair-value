@@ -990,6 +990,27 @@
     return update;
   }
 
+  /** 現價在尺標上的位置（%）。
+   *
+   *  三個刻度標籤在 HTML 裡固定釘在 25% / 50% / 75%，軌道的三段底色也是照
+   *  這個比例切的（見 style.css 的 .seg-cheap / .seg-fair / .seg-rich），
+   *  所以位置一定要用分段映射把 低／中／高 三個值對到那三個點。
+   *
+   *  曾經這裡寫成 (p − lo) / (hi − lo) 的單純線性映射，游標與刻度就變成兩套
+   *  座標系：例如 低 17.87、中 126.44、高 569.80、現價 154.04（高於中位數），
+   *  線性算出來是 24.7%，反而落在「最小」標籤的左邊，看起來像低於最小值。
+   *
+   *  兩端各留 2–25% 與 75–98% 當緩衝，超出範圍時游標才不會貼死在邊緣。
+   */
+  function gaugePos(p, lo, mid, hi) {
+    // 分母為 0（三個值相同或只有單一數值）時退回區段起點，不要算出 NaN
+    const map = (v, a, b, c, d) => (b === a ? c : c + ((v - a) / (b - a)) * (d - c));
+    if (p <= lo) return clamp(map(p, lo * 0.6, lo, 2, 25), 2, 25);
+    if (p <= mid) return clamp(map(p, lo, mid, 25, 50), 25, 50);
+    if (p <= hi) return clamp(map(p, mid, hi, 50, 75), 50, 75);
+    return clamp(map(p, hi, hi * 1.6, 75, 98), 75, 98);
+  }
+
   /* 獲利品質：毛利率與營業利益率的走勢
    *
    * 刻意不做成第十二種公式，也不進彙總統計 —— 它不是估價指標，
@@ -1088,8 +1109,8 @@
       return;
     }
 
-    const pos = clamp(((s.p - lo) / (hi - lo)) * 100, 2, 98);
-    el.gaugeMark.style.left = pos.toFixed(1) + "%";
+    // 刻度定位而已，不含評價：最小落在 25%、中位數 50%、最大 75%
+    el.gaugeMark.style.left = gaugePos(s.p, lo, md, hi).toFixed(1) + "%";
 
     const below = all.filter((v) => v < s.p).length;
     const pctBelow = (below / all.length) * 100;
